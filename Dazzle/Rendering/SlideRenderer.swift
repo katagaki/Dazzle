@@ -300,26 +300,28 @@ struct SlideRenderer {
         _ picture: SlideShape.Picture, shape: SlideShape, frame: CGRect, style: SlideStyleContext, context: CGContext
     ) {
         guard let path = picture.imagePath, let data = presentation.data(at: path),
-              var image = ImageCache.shared.image(for: data, path: path) else {
+              let image = ImageCache.shared.image(for: data, path: path) else {
             drawStandIn(String(localized: "Object.Picture"), frame: frame, context: context, isChart: false)
             return
         }
-        let width = CGFloat(image.width)
-        let height = CGFloat(image.height)
-        let crop = CGRect(
-            x: width * max(picture.cropLeft, 0), y: height * max(picture.cropTop, 0),
-            width: width * (1 - max(picture.cropLeft, 0) - max(picture.cropRight, 0)),
-            height: height * (1 - max(picture.cropTop, 0) - max(picture.cropBottom, 0))
-        ).integral
-        if crop.width > 0, crop.height > 0, crop.size != CGSize(width: width, height: height),
-           let cropped = image.cropping(to: crop) {
-            image = cropped
+        // The crop says which part of the picture fills the frame. Cut from
+        // an edge, the picture is larger than the frame and clipped to it;
+        // negative, it is smaller and the frame shows round it.
+        let visibleWidth = 1 - picture.cropLeft - picture.cropRight
+        let visibleHeight = 1 - picture.cropTop - picture.cropBottom
+        var imageRect = frame
+        if visibleWidth > 0.001, visibleHeight > 0.001 {
+            imageRect.size = CGSize(width: frame.width / visibleWidth, height: frame.height / visibleHeight)
+            imageRect.origin = CGPoint(
+                x: frame.minX - imageRect.width * picture.cropLeft,
+                y: frame.minY - imageRect.height * picture.cropTop
+            )
         }
         let (outlinePath, _, _) = outline(of: shape, in: frame)
         context.saveGState()
         context.addPath(outlinePath)
         context.clip()
-        drawImage(image, in: frame, context: context)
+        drawImage(image, in: imageRect, context: context)
         context.restoreGState()
         if let (line, placeholderColor) = style.line(for: shape, sources: []) {
             stroke(outlinePath, line: line, placeholderColor: placeholderColor, style: style, context: context)

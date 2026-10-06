@@ -87,6 +87,16 @@ struct TextRenderer {
         drawStrikethroughs(in: frame, context: context)
     }
 
+    /// How tall `body` lays out at `width`, insets included.
+    func height(of body: TextBody, shape: SlideShape, width: CGFloat) -> CGFloat {
+        let properties = style.bodyProperties(for: shape, sources: []).merged(over: body.properties)
+        let horizontal = EMU.points((properties.leftInset ?? 91_440) + (properties.rightInset ?? 91_440))
+        let vertical = EMU.points((properties.topInset ?? 45_720) + (properties.bottomInset ?? 45_720))
+        let string = attributedString(body, shape: shape, sources: [], scale: 1, spacingReduction: 0, colorOverride: nil)
+        let size = suggestedSize(CTFramesetterCreateWithAttributedString(string), string: string, width: max(width - horizontal, 1))
+        return ceil(size.height) + vertical
+    }
+
     private func suggestedSize(_ framesetter: CTFramesetter, string: NSAttributedString, width: CGFloat) -> CGSize {
         CTFramesetterSuggestFrameSizeWithConstraints(
             framesetter, CFRange(location: 0, length: string.length), nil,

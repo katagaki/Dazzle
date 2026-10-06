@@ -10,11 +10,14 @@ final class DeckResources: Equatable, Sendable {
     /// `p:defaultTextStyle`: the base of every text style.
     let defaultTextStyle: ListStyle
     let notesMasterPath: String?
+    /// Table styles the file defines, by id.
+    let tableStyles: [String: TableStyle]
 
     init(
         masters: [String: SlideMaster], layouts: [String: SlideLayout], layoutOrder: [String],
-        defaultTextStyle: ListStyle, notesMasterPath: String?
+        defaultTextStyle: ListStyle, notesMasterPath: String?, tableStyles: [String: TableStyle] = [:]
     ) {
+        self.tableStyles = tableStyles
         self.masters = masters
         self.layouts = layouts
         self.layoutOrder = layoutOrder

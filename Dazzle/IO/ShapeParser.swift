@@ -248,13 +248,21 @@ final class ShapeParser {
                 height: row.attribute("h").flatMap(Int.init) ?? 0,
                 cells: row.children(named: "tc").map { cell in
                     let cellProperties = cell.firstChild(named: "tcPr")
+                    func margin(_ key: String) -> Int? { cellProperties?.attribute(key).flatMap(Int.init) }
+                    func border(_ name: String) -> LineStyle? {
+                        cellProperties?.firstChild(named: name).map(LineStyle.init(element:))
+                    }
                     return SlideTable.Cell(
                         text: cell.firstChild(named: "txBody").map(textBody),
                         fill: Fill.parse(in: cellProperties, image: target(of:)),
                         columnSpan: cell.attribute("gridSpan").flatMap(Int.init) ?? 1,
                         rowSpan: cell.attribute("rowSpan").flatMap(Int.init) ?? 1,
                         isMerged: cell.attribute("hMerge") == "1" || cell.attribute("vMerge") == "1",
-                        anchor: cellProperties?.attribute("anchor").flatMap(BodyProperties.Anchor.init(rawValue:))
+                        anchor: cellProperties?.attribute("anchor").flatMap(BodyProperties.Anchor.init(rawValue:)),
+                        marginLeft: margin("marL"), marginRight: margin("marR"),
+                        marginTop: margin("marT"), marginBottom: margin("marB"),
+                        borderLeft: border("lnL"), borderRight: border("lnR"),
+                        borderTop: border("lnT"), borderBottom: border("lnB")
                     )
                 }
             )
@@ -262,7 +270,8 @@ final class ShapeParser {
         return SlideTable(
             columnWidths: widths, rows: rows,
             hasHeaderRow: properties?.attribute("firstRow") == "1",
-            hasBandedRows: properties?.attribute("bandRow") == "1"
+            hasBandedRows: properties?.attribute("bandRow") == "1",
+            styleID: properties?.firstChild(named: "tableStyleId")?.text.trimmed.nilIfEmpty
         )
     }
 

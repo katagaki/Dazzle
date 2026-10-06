@@ -58,7 +58,11 @@ enum PPTXReader {
         let resources = DeckResources(
             masters: masters, layouts: layouts, layoutOrder: layoutOrder,
             defaultTextStyle: ListStyle(element: main.firstChild(named: "defaultTextStyle")),
-            notesMasterPath: target(main.firstChild(named: "notesMasterIdLst")?.firstChild(named: "notesMasterId")?.relationshipID)
+            notesMasterPath: target(main.firstChild(named: "notesMasterIdLst")?.firstChild(named: "notesMasterId")?.relationshipID),
+            tableStyles: readTableStyles(
+                mainRelationships.first { $0.type.hasSuffix("/tableStyles") }
+                    .flatMap { parts[PackagePath.resolve($0.target, from: mainPart)] }
+            )
         )
 
         // Slides, in the order the presentation lists them.
@@ -150,6 +154,15 @@ enum PPTXReader {
             showsMasterShapes: root.attribute("showMasterSp") != "0",
             colorMapOverride: override
         )
+    }
+
+    private static func readTableStyles(_ data: Data?) -> [String: TableStyle] {
+        guard let data, let root = try? XMLLite.parse(data) else { return [:] }
+        var styles: [String: TableStyle] = [:]
+        for style in root.children(named: "tblStyle") {
+            if let id = style.attribute("styleId") { styles[id] = TableStyle(element: style) }
+        }
+        return styles
     }
 
     private static func readTheme(_ root: XMLElement) -> Theme {

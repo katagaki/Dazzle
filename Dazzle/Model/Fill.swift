@@ -5,8 +5,10 @@ enum Fill: Equatable, Hashable, Sendable {
     case none
     case solid(DrawingColor)
     case gradient(Gradient)
-    /// A picture, by its path inside the package.
-    case picture(path: String)
+    /// A picture, by its path inside the package, stretched over the area.
+    case picture(path: String, opacity: Double = 1)
+    /// A picture repeated at its own size across the area.
+    case tiledPicture(path: String, opacity: Double = 1)
     /// Whatever the enclosing group is filled with.
     case group
 
@@ -65,7 +67,11 @@ enum Fill: Equatable, Hashable, Sendable {
         case "blipFill":
             guard let reference = element.firstChild(named: "blip")?.attribute("embed"),
                   let path = image(reference) else { return Fill.none }
-            return .picture(path: path)
+            // `alphaModFix` makes the whole picture partly transparent.
+            let opacity = element.firstChild(named: "blip")?.firstChild(named: "alphaModFix")?
+                .attribute("amt").flatMap(Double.init).map { $0 / 100_000 } ?? 1
+            return element.firstChild(named: "tile") != nil
+                ? .tiledPicture(path: path, opacity: opacity) : .picture(path: path, opacity: opacity)
         case "pattFill":
             // A pattern is drawn as its foreground, which is what it reads as at a distance.
             return DrawingColor.first(in: element.firstChild(named: "fgClr")).map(Fill.solid) ?? Fill.none
@@ -80,7 +86,7 @@ enum Fill: Equatable, Hashable, Sendable {
     /// they come back as nothing rather than as a dangling reference.
     var xml: String {
         switch self {
-        case .none, .picture: return "<a:noFill/>"
+        case .none, .picture, .tiledPicture: return "<a:noFill/>"
         case .group: return "<a:grpFill/>"
         case .solid(let color): return "<a:solidFill>\(color.xml)</a:solidFill>"
         case .gradient(let gradient):

@@ -231,13 +231,40 @@ struct SlideRenderer {
                 )
             }
             context.restoreGState()
-        case .picture(let imagePath):
+        case .picture(let imagePath, let opacity):
             guard let data = presentation.data(at: imagePath),
                   let image = ImageCache.shared.image(for: data, path: imagePath) else { return }
             context.saveGState()
+            context.setAlpha(opacity)
             context.addPath(path)
             context.clip(using: .evenOdd)
             drawImage(image, in: bounds, context: context)
+            context.restoreGState()
+        case .tiledPicture(let imagePath, let opacity):
+            guard let data = presentation.data(at: imagePath),
+                  let image = ImageCache.shared.image(for: data, path: imagePath) else { return }
+            // A tile is laid at its own size: pixels at 96 to the inch.
+            let tile = CGSize(width: CGFloat(image.width) * 0.75, height: CGFloat(image.height) * 0.75)
+            guard tile.width >= 1, tile.height >= 1 else { return }
+            let columns = Int((bounds.width / tile.width).rounded(.up))
+            let rows = Int((bounds.height / tile.height).rounded(.up))
+            context.saveGState()
+            context.setAlpha(opacity)
+            context.addPath(path)
+            context.clip(using: .evenOdd)
+            if columns * rows > 4_000 {
+                // Too fine a tile to lay one by one: stretching looks the same.
+                drawImage(image, in: bounds, context: context)
+            } else {
+                for row in 0..<rows {
+                    for column in 0..<columns {
+                        drawImage(image, in: CGRect(
+                            origin: CGPoint(x: bounds.minX + CGFloat(column) * tile.width, y: bounds.minY + CGFloat(row) * tile.height),
+                            size: tile
+                        ), context: context)
+                    }
+                }
+            }
             context.restoreGState()
         }
     }

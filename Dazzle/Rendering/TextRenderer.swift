@@ -165,6 +165,7 @@ struct TextRenderer {
                 var text = run.text
                 if case .field(let type) = run.kind, type == "slidenum" { text = String(slideNumber) }
                 if runProperties.capitalization == "all" { text = text.uppercased() }
+                text = Self.symbolsMapped(text)
                 result.append(NSAttributedString(
                     string: text, attributes: attributes(for: runProperties, scale: scale, colorOverride: colorOverride)
                 ))
@@ -325,6 +326,9 @@ struct TextRenderer {
         case "§": "■"
         case "Ø": "➢"
         case "ü": "✓"
+        case "û": "✗"
+        case "à": "→"
+        case "è": "➔"
         case "q", "o": "◦"
         case "Ÿ", "·": "•"
         case "n": "■"
@@ -333,6 +337,21 @@ struct TextRenderer {
         case "": "•"
         default: bullet
         }
+    }
+
+    /// Run text in a symbol font can carry the same private-use characters
+    /// as bullets do; those are drawn as what they look like, the rest left be.
+    static func symbolsMapped(_ text: String) -> String {
+        guard text.unicodeScalars.contains(where: { (0xF000...0xF0FF).contains($0.value) }) else { return text }
+        var result = ""
+        for scalar in text.unicodeScalars {
+            if (0xF000...0xF0FF).contains(scalar.value) {
+                result += displayable(String(scalar))
+            } else {
+                result.unicodeScalars.append(scalar)
+            }
+        }
+        return result
     }
 
     static func numberLabel(_ number: Int, scheme: String) -> String {

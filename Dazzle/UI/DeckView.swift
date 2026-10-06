@@ -81,7 +81,9 @@ struct DeckView: View {
                     }
             }
             .navigationTransition(.zoom(sourceID: panel, in: panelTransition))
-            .presentationDetents(panel == .export ? [.large] : [.medium, .large])
+            // Formatting panels stay at half height, so the slide they change
+            // is always in view; export needs the room for its slide picker.
+            .presentationDetents(panel == .export ? [.large] : [.medium])
             .presentationDragIndicator(.visible)
             .presentationBackground(.regularMaterial)
             // The slide stays live above a half-height panel, so changes can be

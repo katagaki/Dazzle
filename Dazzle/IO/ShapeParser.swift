@@ -236,7 +236,9 @@ final class ShapeParser {
             }
             return moved
         }
-        return .diagram(shapes)
+        // A drawing with nothing in it is a diagram only its layout engine
+        // could draw; leave it to the stand-in, which at least says so.
+        return shapes.isEmpty ? nil : .diagram(shapes)
     }
 
     private func table(_ element: XMLElement) -> SlideTable {

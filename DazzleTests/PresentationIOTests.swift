@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import Dazzle
@@ -293,5 +294,47 @@ struct RenderingFidelityTests {
             <blipFill xmlns:r="r"><blip r:embed="rId1"><alphaModFix amt="50000"/></blip><tile/></blipFill>
             """.utf8))
         #expect(Fill.parse(element: tiled, image: { _ in "ppt/media/a.png" }) == .tiledPicture(path: "ppt/media/a.png", effects: { var e = BlipEffects(); e.opacity = 0.5; return e }()))
+    }
+}
+
+@Suite("Picture effects and symbols")
+struct PictureEffectTests {
+    @Test("Blip effects read greyscale, duotone and transparency")
+    func blipEffects() throws {
+        let blip = try XMLLite.parse(Data("""
+            <blip><grayscl/><alphaModFix amt="40000"/><duotone><srgbClr val="000000"/><schemeClr val="bg1"/></duotone></blip>
+            """.utf8))
+        let effects = BlipEffects(blip: blip)
+        #expect(effects.isGreyscale)
+        #expect(effects.opacity == 0.4)
+        #expect(effects.duotone == [.rgb(0x000000), .scheme("bg1")])
+        #expect(effects.altersColor)
+        #expect(!BlipEffects().altersColor)
+    }
+
+    @Test("Recolouring maps luminance onto the duotone colours")
+    func recolor() throws {
+        let space = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try #require(CGContext(
+            data: nil, width: 2, height: 1, bitsPerComponent: 8, bytesPerRow: 8, space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 2, height: 1))
+        let white = try #require(context.makeImage())
+        let red = RGBAColor(hex: 0xFF0000)
+        let recolored = try #require(ImageCache.shared.recolored(
+            white, key: "test-white", isGreyscale: false, duotone: [.black, red]
+        ))
+        let data = try #require(recolored.dataProvider?.data as Data?)
+        // White is the light end of the duotone.
+        #expect(Array(data.prefix(3)) == [255, 0, 0])
+    }
+
+    @Test("Symbol-font characters in text are drawn as what they look like")
+    func symbols() {
+        #expect(TextRenderer.symbolsMapped("\u{F0E0} next") == "→ next")
+        #expect(TextRenderer.symbolsMapped("\u{F0FC}") == "✓")
+        #expect(TextRenderer.symbolsMapped("plain") == "plain")
     }
 }

@@ -75,16 +75,15 @@ struct SlideRenderer {
 
         switch shape.kind {
         case .group(let group):
-            let child = group.childFrame.points
-            context.translateBy(x: frame.minX, y: frame.minY)
-            context.scaleBy(
-                x: child.width > 0 ? frame.width / child.width : 1,
-                y: child.height > 0 ? frame.height / child.height : 1
-            )
-            context.translateBy(x: -child.minX, y: -child.minY)
+            // Children are placed in slide space rather than by scaling the
+            // context: a group's transform moves and sizes its members, but
+            // leaves line widths and text sizes as they are.
             let fill = style.fill(for: shape, sources: [])
             for member in group.children {
-                draw(member, sources: [], style: style, context: context, groupFill: fill ?? groupFill)
+                draw(
+                    Self.placed(member, from: group.childFrame, into: shape.frame), sources: [], style: style,
+                    context: context, groupFill: fill ?? groupFill
+                )
             }
         case .diagram(let shapes):
             for member in shapes {
@@ -103,6 +102,25 @@ struct SlideRenderer {
         case .shape, .connector:
             drawAutoShape(shape, sources: sources, frame: frame, style: style, context: context, groupFill: groupFill)
         }
+    }
+
+    /// A group member moved from the group's child space into its frame.
+    static func placed(_ shape: SlideShape, from child: EMURect, into frame: EMURect) -> SlideShape {
+        guard child.width > 0, child.height > 0 else { return shape }
+        let scaleX = Double(frame.width) / Double(child.width)
+        let scaleY = Double(frame.height) / Double(child.height)
+        func map(_ rect: EMURect) -> EMURect {
+            EMURect(
+                x: frame.x + Int((Double(rect.x - child.x) * scaleX).rounded()),
+                y: frame.y + Int((Double(rect.y - child.y) * scaleY).rounded()),
+                width: Int((Double(rect.width) * scaleX).rounded()),
+                height: Int((Double(rect.height) * scaleY).rounded())
+            )
+        }
+        var placed = shape
+        placed.frame = map(shape.frame)
+        placed.textFrame = shape.textFrame.map(map)
+        return placed
     }
 
     private func outline(of shape: SlideShape, in frame: CGRect) -> (fill: CGPath, stroke: CGPath, isOpen: Bool) {

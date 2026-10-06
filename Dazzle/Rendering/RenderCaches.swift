@@ -43,7 +43,12 @@ final class FontResolver: @unchecked Sendable {
 
         var font = base(family: family, size: size)
         var traits: CTFontSymbolicTraits = []
-        if bold { traits.insert(.traitBold) }
+        // A heavy face iOS does not have is closest in the bold of the substitute.
+        let lowered = family?.lowercased() ?? ""
+        let isHeavyFamily = lowered.contains("black") || lowered.contains("heavy")
+        if bold || (isHeavyFamily && (CTFontCopyFamilyName(font) as String).lowercased() != lowered) {
+            traits.insert(.traitBold)
+        }
         if italic { traits.insert(.traitItalic) }
         if !traits.isEmpty {
             font = CTFontCreateCopyWithSymbolicTraits(font, size, nil, traits, traits) ?? font

@@ -303,7 +303,15 @@ struct TextRenderer {
     /// Wingdings and Symbol bullets name private-use glyphs; draw the
     /// common ones as the characters they look like.
     private static func displayable(_ bullet: String) -> String {
-        switch bullet {
+        // Symbol fonts are often written in the private use area, U+F0xx,
+        // standing for the font's own character xx.
+        if let scalar = bullet.unicodeScalars.first, bullet.unicodeScalars.count == 1,
+           (0xF000...0xF0FF).contains(scalar.value) {
+            let symbol = String(UnicodeScalar(UInt8(scalar.value - 0xF000)))
+            let mapped = displayable(symbol)
+            return mapped == symbol ? "•" : mapped
+        }
+        return switch bullet {
         case "§": "■"
         case "Ø": "➢"
         case "ü": "✓"

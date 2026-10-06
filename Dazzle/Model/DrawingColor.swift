@@ -178,6 +178,21 @@ struct RGBAColor: Equatable, Hashable, Sendable {
         return (hue, saturation, luminance)
     }
 
+    /// Applies `change` to each channel in linear light.
+    private func linearMix(_ change: (Double) -> Double) -> RGBAColor {
+        func toLinear(_ value: Double) -> Double {
+            value <= 0.040_45 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        func toEncoded(_ value: Double) -> Double {
+            let clamped = min(max(value, 0), 1)
+            return clamped <= 0.003_130_8 ? clamped * 12.92 : 1.055 * pow(clamped, 1 / 2.4) - 0.055
+        }
+        return RGBAColor(
+            red: toEncoded(change(toLinear(red))), green: toEncoded(change(toLinear(green))),
+            blue: toEncoded(change(toLinear(blue))), alpha: alpha
+        )
+    }
+
     /// Applies one DrawingML colour transform. Values are in thousandths of
     /// a percent, as the file stores them.
     func applying(_ transform: DrawingColor.Transform) -> RGBAColor {
@@ -203,13 +218,12 @@ struct RGBAColor: Equatable, Hashable, Sendable {
                 luminance: min(max(luminance, 0), 1), alpha: alpha
             )
         case "tint":
-            // "A 10% tint is 10% of the input colour combined with 90% white."
-            result = RGBAColor(
-                red: red * amount + (1 - amount), green: green * amount + (1 - amount),
-                blue: blue * amount + (1 - amount), alpha: alpha
-            )
+            // "A 10% tint is 10% of the input colour combined with 90% white",
+            // mixed in linear light as Office does: black at a 75% tint is
+            // #898989, not the #404040 mixing the encoded values would give.
+            result = linearMix { $0 * amount + (1 - amount) }
         case "shade":
-            result = RGBAColor(red: red * amount, green: green * amount, blue: blue * amount, alpha: alpha)
+            result = linearMix { $0 * amount }
         case "inv":
             result = RGBAColor(red: 1 - red, green: 1 - green, blue: 1 - blue, alpha: alpha)
         case "gray":

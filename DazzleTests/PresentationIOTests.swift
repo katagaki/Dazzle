@@ -239,7 +239,9 @@ struct RenderingTests {
     func colorTransforms() {
         let red = RGBAColor(hex: 0xFF0000)
         #expect(red.applying(.init(name: "alpha", value: 50_000)).alpha == 0.5)
-        #expect(red.applying(.init(name: "shade", value: 50_000)).hexValue == 0x800000)
+        // Tint and shade mix in linear light, as Office does.
+        #expect(RGBAColor.black.applying(.init(name: "tint", value: 75_000)).hexValue == 0x898989)
+        #expect(red.applying(.init(name: "shade", value: 50_000)).hexValue == 0xBC0000)
         let lighter = red.applying(.init(name: "lumMod", value: 60_000)).applying(.init(name: "lumOff", value: 40_000))
         #expect(lighter.hsl.luminance > red.hsl.luminance)
     }

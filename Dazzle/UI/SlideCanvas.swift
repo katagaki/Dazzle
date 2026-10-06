@@ -1,0 +1,250 @@
+import SwiftUI
+
+/// The slide being edited, fitted to the space it has, with the selected
+/// shape's frame and handles drawn over it.
+///
+/// Tap a shape to select it, drag it to move it, drag a handle to resize
+/// it, and double-tap one with text to edit the text. Moves and resizes are
+/// previewed live and written to the document once, when the finger lifts,
+/// so each is a single undo step.
+struct SlideCanvas: View {
+    @Binding var presentation: Presentation
+    @Bindable var state: EditorState
+    /// Swiping across empty slide moves to the neighbouring slide.
+    var onSwipe: (_ forward: Bool) -> Void = { _ in /* No neighbouring slides to move to. */ }
+    /// Lift the slide to the top, clear of a panel covering the lower half.
+    var isRaised = false
+
+    /// A move or resize in progress, in slide points.
+    @State private var interaction: Interaction?
+
+    private struct Interaction: Equatable {
+        var shapeID: SlideShape.ID
+        var original: CGRect
+        var frame: CGRect
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let slideSize = presentation.slideSize.points
+            let available = CGSize(width: max(proxy.size.width - 32, 1), height: max(proxy.size.height - 32, 1))
+            let scale = min(available.width / slideSize.width, available.height / slideSize.height)
+            let size = CGSize(width: slideSize.width * scale, height: slideSize.height * scale)
+            if let slide = state.selectedSlide(in: presentation) {
+                canvas(for: slide, scale: scale, size: size)
+                    .frame(width: size.width, height: size.height)
+                    .position(x: proxy.size.width / 2, y: isRaised ? 16 + size.height / 2 : proxy.size.height / 2)
+                    .animation(.snappy(duration: 0.3), value: isRaised)
+            }
+        }
+    }
+
+    // MARK: - Canvas
+
+    private func canvas(for slide: Slide, scale: CGFloat, size: CGSize) -> some View {
+        let displayed = preview(of: slide)
+        return ZStack(alignment: .topLeading) {
+            SlideView(presentation: presentation, slide: displayed, options: .editing)
+                .frame(width: size.width, height: size.height)
+                .clipShape(.rect(cornerRadius: 3))
+                .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
+                .contentShape(.rect)
+                .gesture(moveGesture(on: slide, scale: scale))
+                .simultaneousGesture(tapGestures(on: slide, scale: scale))
+                .accessibilityIdentifier("slideCanvas")
+
+            if !state.isDrawing, let shape = displayed.shapes.first(where: { $0.id == state.selectedShapeID }) {
+                selection(for: shape, scale: scale)
+            }
+
+            if state.isDrawing {
+                DrawingOverlay(scale: scale) { media, frame in
+                    state.insertPicture(media, frame: frame, name: String(localized: "Drawing.ShapeName"), in: &presentation)
+                    state.isDrawing = false
+                } cancel: {
+                    state.isDrawing = false
+                }
+                .frame(width: size.width, height: size.height)
+            }
+        }
+    }
+
+    /// The slide with the move or resize in progress applied.
+    private func preview(of slide: Slide) -> Slide {
+        guard let interaction, let index = slide.shapes.firstIndex(where: { $0.id == interaction.shapeID }) else {
+            return slide
+        }
+        var slide = slide
+        slide.shapes[index].frame = EMURect(points: interaction.frame)
+        return slide
+    }
+
+    // MARK: - Hit testing
+
+    /// The topmost shape under a point, in slide points.
+    private func shape(at point: CGPoint, on slide: Slide, scale: CGFloat) -> SlideShape? {
+        // A line has no area; give it some, a fingertip's worth.
+        let slop = 10 / scale
+        return slide.shapes.reversed().first { shape in
+            let frame = shape.frame.points
+            return frame.insetBy(dx: frame.width < slop ? -slop : 0, dy: frame.height < slop ? -slop : 0).contains(point)
+        }
+    }
+
+    private func tapGestures(on slide: Slide, scale: CGFloat) -> some Gesture {
+        let doubleTap = SpatialTapGesture(count: 2).onEnded { value in
+            let point = CGPoint(x: value.location.x / scale, y: value.location.y / scale)
+            guard let shape = shape(at: point, on: slide, scale: scale) else { return }
+            state.selectedShapeID = shape.id
+            if shape.canHoldText, shape.isEditable { state.presentedPanel = .text }
+        }
+        let singleTap = SpatialTapGesture().onEnded { value in
+            let point = CGPoint(x: value.location.x / scale, y: value.location.y / scale)
+            state.selectedShapeID = shape(at: point, on: slide, scale: scale)?.id
+        }
+        return doubleTap.exclusively(before: singleTap)
+    }
+
+    private func moveGesture(on slide: Slide, scale: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { value in
+                if interaction == nil {
+                    let start = CGPoint(x: value.startLocation.x / scale, y: value.startLocation.y / scale)
+                    guard let shape = shape(at: start, on: slide, scale: scale), shape.isEditable,
+                          slide.canEditShapes else { return }
+                    state.selectedShapeID = shape.id
+                    interaction = Interaction(shapeID: shape.id, original: shape.frame.points, frame: shape.frame.points)
+                }
+                guard var current = interaction else { return }
+                current.frame = current.original.offsetBy(dx: value.translation.width / scale, dy: value.translation.height / scale)
+                interaction = current
+            }
+            .onEnded { value in
+                if let interaction {
+                    if interaction.frame != interaction.original {
+                        state.setFrame(interaction.frame, of: interaction.shapeID, in: &presentation)
+                    }
+                    self.interaction = nil
+                } else if abs(value.translation.width) > 60, abs(value.translation.width) > abs(value.translation.height) * 1.5 {
+                    onSwipe(value.translation.width < 0)
+                }
+            }
+    }
+
+    // MARK: - Selection
+
+    private enum Handle: CaseIterable, Identifiable {
+        case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
+
+        var id: Self { self }
+
+        /// Which edges the handle moves: -1 the leading or top, 1 the trailing or bottom.
+        var unit: (x: CGFloat, y: CGFloat) {
+            switch self {
+            case .topLeft: (-1, -1)
+            case .top: (0, -1)
+            case .topRight: (1, -1)
+            case .right: (1, 0)
+            case .bottomRight: (1, 1)
+            case .bottom: (0, 1)
+            case .bottomLeft: (-1, 1)
+            case .left: (-1, 0)
+            }
+        }
+
+        var isCorner: Bool { unit.x != 0 && unit.y != 0 }
+    }
+
+    @ViewBuilder
+    private func selection(for shape: SlideShape, scale: CGFloat) -> some View {
+        let frame = shape.frame.points
+        let rect = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale)
+        ZStack(alignment: .topLeading) {
+            Rectangle()
+                .strokeBorder(Color.accentColor, lineWidth: 1.5)
+                .frame(width: max(rect.width, 1), height: max(rect.height, 1))
+                .offset(x: rect.minX, y: rect.minY)
+                .allowsHitTesting(false)
+
+            if shape.isEditable {
+                ForEach(handles(for: rect)) { handle in
+                    let point = position(of: handle, in: rect)
+                    Circle()
+                        .fill(.white)
+                        .overlay(Circle().strokeBorder(Color.accentColor, lineWidth: 1.5))
+                        .frame(width: 12, height: 12)
+                        .padding(10)
+                        .contentShape(.circle)
+                        .offset(x: point.x - 16, y: point.y - 16)
+                        .gesture(resizeGesture(handle, shape: shape, scale: scale))
+                        .accessibilityHidden(true)
+                }
+            } else {
+                // Kept but not editable: say so where the user is looking.
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .padding(5)
+                    .background(.regularMaterial, in: .circle)
+                    .offset(x: rect.maxX - 12, y: rect.minY - 12)
+                    .allowsHitTesting(false)
+            }
+        }
+        .rotationEffect(.degrees(shape.rotation), anchor: UnitPoint(
+            x: rect.midX / max(presentation.slideSize.points.width * scale, 1),
+            y: rect.midY / max(presentation.slideSize.points.height * scale, 1)
+        ))
+    }
+
+    /// Lines have no height or no width; their edge handles would sit on
+    /// top of their corner handles.
+    private func handles(for rect: CGRect) -> [Handle] {
+        if rect.height < 4 { return [.left, .right] }
+        if rect.width < 4 { return [.top, .bottom] }
+        return Handle.allCases
+    }
+
+    private func position(of handle: Handle, in rect: CGRect) -> CGPoint {
+        CGPoint(x: rect.midX + handle.unit.x * rect.width / 2, y: rect.midY + handle.unit.y * rect.height / 2)
+    }
+
+    private func resizeGesture(_ handle: Handle, shape: SlideShape, scale: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let original = interaction?.original ?? shape.frame.points
+                let dx = value.translation.width / scale
+                let dy = value.translation.height / scale
+                var minX = original.minX
+                var maxX = original.maxX
+                var minY = original.minY
+                var maxY = original.maxY
+                if handle.unit.x < 0 { minX += dx }
+                if handle.unit.x > 0 { maxX += dx }
+                if handle.unit.y < 0 { minY += dy }
+                if handle.unit.y > 0 { maxY += dy }
+                let minimum: CGFloat = 4
+                // A line keeps its zero thickness; anything else keeps some size.
+                if original.width >= minimum { maxX = max(maxX, minX + minimum) }
+                if original.height >= minimum { maxY = max(maxY, minY + minimum) }
+                var frame = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+
+                // Pictures keep their proportions when pulled by a corner.
+                if handle.isCorner, shape.isPicture, original.width > 0, original.height > 0 {
+                    let ratio = max(frame.width / original.width, frame.height / original.height)
+                    let width = original.width * ratio
+                    let height = original.height * ratio
+                    frame = CGRect(
+                        x: handle.unit.x < 0 ? original.maxX - width : original.minX,
+                        y: handle.unit.y < 0 ? original.maxY - height : original.minY,
+                        width: width, height: height
+                    )
+                }
+                interaction = Interaction(shapeID: shape.id, original: original, frame: frame)
+            }
+            .onEnded { _ in
+                if let interaction, interaction.frame != interaction.original {
+                    state.setFrame(interaction.frame, of: interaction.shapeID, in: &presentation)
+                }
+                interaction = nil
+            }
+    }
+}

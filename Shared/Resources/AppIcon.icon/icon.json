@@ -1,31 +1,85 @@
 {
-  "fill" : {
-    "automatic-gradient" : "extended-srgb:0.94118,0.40000,0.18824,1.00000"
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.94118,0.40000,0.18824,1.00000"
   },
-  "groups" : [
+  "groups": [
     {
-      "blend-mode" : "normal",
-      "layers" : [
+      "blend-mode": "normal",
+      "layers": [
         {
-          "glass" : true,
-          "hidden" : false,
-          "image-name" : "Stage.svg",
-          "name" : "Stage",
-          "position-specializations" : [
+          "glass": true,
+          "hidden": false,
+          "image-name": "Outline.svg",
+          "name": "Outline",
+          "position-specializations": [
             {
-              "value" : {
-                "scale" : 1,
-                "translation-in-points" : [
+              "value": {
+                "scale": 1,
+                "translation-in-points": [
                   0,
                   0
                 ]
               }
             },
             {
-              "idiom" : "square",
-              "value" : {
-                "scale" : 1.15,
-                "translation-in-points" : [
+              "idiom": "square",
+              "value": {
+                "scale": 1.15,
+                "translation-in-points": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "glass": true,
+          "hidden": false,
+          "image-name": "Bento.svg",
+          "name": "Bento",
+          "position-specializations": [
+            {
+              "value": {
+                "scale": 1,
+                "translation-in-points": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "idiom": "square",
+              "value": {
+                "scale": 1.15,
+                "translation-in-points": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "glass": true,
+          "hidden": false,
+          "image-name": "Monitor.svg",
+          "name": "Monitor",
+          "position-specializations": [
+            {
+              "value": {
+                "scale": 1,
+                "translation-in-points": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "idiom": "square",
+              "value": {
+                "scale": 1.15,
+                "translation-in-points": [
                   0,
                   0
                 ]
@@ -34,21 +88,21 @@
           ]
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
       },
-      "specular" : true,
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.5
       }
     }
   ],
-  "supported-platforms" : {
-    "circles" : [
+  "supported-platforms": {
+    "circles": [
       "watchOS"
     ],
-    "squares" : "shared"
+    "squares": "shared"
   }
 }

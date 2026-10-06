@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    A bento layout on the screen: one tall tile, a wide one beside it, and
+    two small ones beneath that, as a slide of content blocks would be laid
+    out. The tiles step through opacity so the grid reads as a design rather
+    than a pattern.
+  -->
+  <g fill="#FFFFFF">
+    <rect x="232" y="296" width="248" height="328" rx="22" opacity="0.95"/>
+    <rect x="500" y="296" width="292" height="152" rx="22" opacity="0.7"/>
+    <rect x="500" y="468" width="136" height="156" rx="22" opacity="0.55"/>
+    <rect x="656" y="468" width="136" height="156" rx="22" opacity="0.82"/>
+  </g>
+</svg>

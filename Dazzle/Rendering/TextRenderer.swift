@@ -114,7 +114,10 @@ struct TextRenderer {
             let level = paragraph.properties.level ?? 0
             let properties = paragraph.properties.merged(over: style.paragraphBase(for: shape, sources: sources, level: level))
             let start = result.length
-            let endRun = (paragraph.endProperties ?? RunProperties()).merged(over: properties.defaultRun)
+            // A paragraph break is as tall as the text before it; only an empty
+            // paragraph, or one that says so, takes its end-of-paragraph size.
+            let endRun = (paragraph.endProperties ?? paragraph.runs.last?.properties ?? RunProperties())
+                .merged(over: properties.defaultRun)
             let firstRun = paragraph.runs.first.map { $0.properties.merged(over: properties.defaultRun) } ?? endRun
             let baseSize = CGFloat(firstRun.size ?? 1_800) / 100 * scale
 

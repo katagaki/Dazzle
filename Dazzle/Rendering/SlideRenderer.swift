@@ -231,25 +231,27 @@ struct SlideRenderer {
                 )
             }
             context.restoreGState()
-        case .picture(let imagePath, let opacity):
-            guard let data = presentation.data(at: imagePath),
-                  let image = ImageCache.shared.image(for: data, path: imagePath) else { return }
+        case .picture(let imagePath, let effects):
+            guard let image = image(at: imagePath, effects: effects, placeholderColor: placeholderColor, style: style) else {
+                return
+            }
             context.saveGState()
-            context.setAlpha(opacity)
+            context.setAlpha(effects.opacity)
             context.addPath(path)
             context.clip(using: .evenOdd)
             drawImage(image, in: bounds, context: context)
             context.restoreGState()
-        case .tiledPicture(let imagePath, let opacity):
-            guard let data = presentation.data(at: imagePath),
-                  let image = ImageCache.shared.image(for: data, path: imagePath) else { return }
+        case .tiledPicture(let imagePath, let effects):
+            guard let image = image(at: imagePath, effects: effects, placeholderColor: placeholderColor, style: style) else {
+                return
+            }
             // A tile is laid at its own size: pixels at 96 to the inch.
             let tile = CGSize(width: CGFloat(image.width) * 0.75, height: CGFloat(image.height) * 0.75)
             guard tile.width >= 1, tile.height >= 1 else { return }
             let columns = Int((bounds.width / tile.width).rounded(.up))
             let rows = Int((bounds.height / tile.height).rounded(.up))
             context.saveGState()
-            context.setAlpha(opacity)
+            context.setAlpha(effects.opacity)
             context.addPath(path)
             context.clip(using: .evenOdd)
             if columns * rows > 4_000 {
@@ -331,8 +333,8 @@ struct SlideRenderer {
     private func drawPicture(
         _ picture: SlideShape.Picture, shape: SlideShape, frame: CGRect, style: SlideStyleContext, context: CGContext
     ) {
-        guard let path = picture.imagePath, let data = presentation.data(at: path),
-              let image = ImageCache.shared.image(for: data, path: path) else {
+        guard let path = picture.imagePath,
+              let image = image(at: path, effects: picture.effects, placeholderColor: nil, style: style) else {
             drawStandIn(String(localized: "Object.Picture"), frame: frame, context: context, isChart: false)
             return
         }
@@ -351,6 +353,7 @@ struct SlideRenderer {
         }
         let (outlinePath, _, _) = outline(of: shape, in: frame)
         context.saveGState()
+        context.setAlpha(picture.effects.opacity)
         context.addPath(outlinePath)
         context.clip()
         drawImage(image, in: imageRect, context: context)
@@ -358,6 +361,21 @@ struct SlideRenderer {
         if let (line, placeholderColor) = style.line(for: shape, sources: []) {
             stroke(outlinePath, line: line, placeholderColor: placeholderColor, style: style, context: context)
         }
+    }
+
+    /// A picture from the package, with its colour effects applied.
+    private func image(
+        at path: String, effects: BlipEffects, placeholderColor: RGBAColor?, style: SlideStyleContext
+    ) -> CGImage? {
+        guard let data = presentation.data(at: path), let image = ImageCache.shared.image(for: data, path: path) else {
+            return nil
+        }
+        guard effects.altersColor else { return image }
+        let tones = effects.duotone.map { style.color($0, placeholder: placeholderColor) }
+        return ImageCache.shared.recolored(
+            image, key: "\(path)#\(data.count)#\(effects.isGreyscale)#\(tones.map(\.hexValue))",
+            isGreyscale: effects.isGreyscale, duotone: tones
+        )
     }
 
     /// CoreGraphics draws images bottom-up; the slide is drawn top-down.

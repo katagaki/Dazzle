@@ -35,6 +35,7 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
         var cropTop = 0.0
         var cropRight = 0.0
         var cropBottom = 0.0
+        var effects = BlipEffects()
     }
 
     struct ShapeGroup: Equatable, Hashable, Sendable {

@@ -120,6 +120,7 @@ final class ShapeParser {
         if let reference = blipFill?.firstChild(named: "blip")?.attribute("embed") {
             picture.imagePath = target(of: reference)
         }
+        picture.effects = BlipEffects(blip: blipFill?.firstChild(named: "blip"))
         if let crop = blipFill?.firstChild(named: "srcRect") {
             func fraction(_ key: String) -> Double { Double(crop.attribute(key).flatMap(Int.init) ?? 0) / 100_000 }
             picture.cropLeft = fraction("l")

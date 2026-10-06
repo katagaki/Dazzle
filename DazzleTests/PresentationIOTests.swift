@@ -292,6 +292,6 @@ struct RenderingFidelityTests {
         let tiled = try XMLLite.parse(Data("""
             <blipFill xmlns:r="r"><blip r:embed="rId1"><alphaModFix amt="50000"/></blip><tile/></blipFill>
             """.utf8))
-        #expect(Fill.parse(element: tiled, image: { _ in "ppt/media/a.png" }) == .tiledPicture(path: "ppt/media/a.png", opacity: 0.5))
+        #expect(Fill.parse(element: tiled, image: { _ in "ppt/media/a.png" }) == .tiledPicture(path: "ppt/media/a.png", effects: { var e = BlipEffects(); e.opacity = 0.5; return e }()))
     }
 }

@@ -6,9 +6,9 @@ enum Fill: Equatable, Hashable, Sendable {
     case solid(DrawingColor)
     case gradient(Gradient)
     /// A picture, by its path inside the package, stretched over the area.
-    case picture(path: String, opacity: Double = 1)
+    case picture(path: String, effects: BlipEffects = BlipEffects())
     /// A picture repeated at its own size across the area.
-    case tiledPicture(path: String, opacity: Double = 1)
+    case tiledPicture(path: String, effects: BlipEffects = BlipEffects())
     /// Whatever the enclosing group is filled with.
     case group
 
@@ -67,11 +67,9 @@ enum Fill: Equatable, Hashable, Sendable {
         case "blipFill":
             guard let reference = element.firstChild(named: "blip")?.attribute("embed"),
                   let path = image(reference) else { return Fill.none }
-            // `alphaModFix` makes the whole picture partly transparent.
-            let opacity = element.firstChild(named: "blip")?.firstChild(named: "alphaModFix")?
-                .attribute("amt").flatMap(Double.init).map { $0 / 100_000 } ?? 1
+            let effects = BlipEffects(blip: element.firstChild(named: "blip"))
             return element.firstChild(named: "tile") != nil
-                ? .tiledPicture(path: path, opacity: opacity) : .picture(path: path, opacity: opacity)
+                ? .tiledPicture(path: path, effects: effects) : .picture(path: path, effects: effects)
         case "pattFill":
             // A pattern is drawn as its foreground, which is what it reads as at a distance.
             return DrawingColor.first(in: element.firstChild(named: "fgClr")).map(Fill.solid) ?? Fill.none
@@ -97,6 +95,31 @@ enum Fill: Equatable, Hashable, Sendable {
             return "<a:gradFill rotWithShape=\"1\"><a:gsLst>\(stops.joined())</a:gsLst>\(shade)</a:gradFill>"
         }
     }
+}
+
+/// What a picture's `a:blip` does to its colours.
+struct BlipEffects: Equatable, Hashable, Sendable {
+    /// `alphaModFix`: the whole picture partly transparent.
+    var opacity = 1.0
+    /// `grayscl`.
+    var isGreyscale = false
+    /// `duotone`: dark to light mapped onto these two colours.
+    var duotone: [DrawingColor] = []
+
+    init() {
+        // No effects: the picture as it is.
+    }
+
+    init(blip: XMLElement?) {
+        guard let blip else { return }
+        opacity = blip.firstChild(named: "alphaModFix")?.attribute("amt").flatMap(Double.init).map { $0 / 100_000 } ?? 1
+        isGreyscale = blip.firstChild(named: "grayscl") != nil
+        let tones = blip.firstChild(named: "duotone")?.children.compactMap(DrawingColor.init(element:)) ?? []
+        if tones.count == 2 { duotone = tones }
+    }
+
+    /// Whether the picture's colours change at all.
+    var altersColor: Bool { isGreyscale || !duotone.isEmpty }
 }
 
 /// The outline of a shape.

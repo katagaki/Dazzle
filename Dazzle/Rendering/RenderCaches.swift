@@ -28,6 +28,44 @@ final class ImageCache: @unchecked Sendable {
         cache.setObject(image, forKey: key)
         return image
     }
+
+    /// A picture in grey, or mapped from dark to light onto two colours.
+    func recolored(_ image: CGImage, key: String, isGreyscale: Bool, duotone: [RGBAColor]) -> CGImage? {
+        let cacheKey = "recolored#\(key)" as NSString
+        if let cached = cache.object(forKey: cacheKey) { return cached }
+        let width = image.width
+        let height = image.height
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: space,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ),
+              let pixels = context.data?.bindMemory(to: UInt8.self, capacity: width * height * 4) else { return image }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let dark = duotone.first
+        let light = duotone.last
+        for offset in stride(from: 0, to: width * height * 4, by: 4) {
+            let alpha = Double(pixels[offset + 3]) / 255
+            guard alpha > 0 else { continue }
+            // Channels are premultiplied; take the colour out of the alpha first.
+            let luminance = (0.299 * Double(pixels[offset]) + 0.587 * Double(pixels[offset + 1])
+                + 0.114 * Double(pixels[offset + 2])) / 255 / alpha
+            var red = luminance
+            var green = luminance
+            var blue = luminance
+            if let dark, let light, !isGreyscale {
+                red = dark.red + (light.red - dark.red) * luminance
+                green = dark.green + (light.green - dark.green) * luminance
+                blue = dark.blue + (light.blue - dark.blue) * luminance
+            }
+            pixels[offset] = UInt8(min(max(red, 0), 1) * alpha * 255)
+            pixels[offset + 1] = UInt8(min(max(green, 0), 1) * alpha * 255)
+            pixels[offset + 2] = UInt8(min(max(blue, 0), 1) * alpha * 255)
+        }
+        guard let recolored = context.makeImage() else { return image }
+        cache.setObject(recolored, forKey: cacheKey)
+        return recolored
+    }
 }
 
 /// Fonts by family, size and style. Families iOS does not have — Calibri,

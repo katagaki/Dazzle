@@ -96,9 +96,8 @@ enum PPTXReader {
         guard let data = parts[path], let root = try? XMLLite.parse(data) else { return nil }
         let relationships = Relationship.parse(parts[PackagePath.relationships(of: path)])
         let theme = relationships.first { $0.type == OOXML.RelationshipType.theme }
-            .flatMap { parts[PackagePath.resolve($0.target, from: path)] }
-            .flatMap { try? XMLLite.parse($0) }
-            .map(readTheme) ?? .office
+            .map { PackagePath.resolve($0.target, from: path) }
+            .flatMap { themePath in readTheme(at: themePath, parts: parts) } ?? .office
         let parser = ShapeParser(partPath: path, relationships: relationships, namespaces: [:], parts: parts)
         let common = root.firstChild(named: "cSld")
         let styles = root.firstChild(named: "txStyles")
@@ -165,7 +164,13 @@ enum PPTXReader {
         return styles
     }
 
-    private static func readTheme(_ root: XMLElement) -> Theme {
+    private static func readTheme(at path: String, parts: [String: Data]) -> Theme? {
+        guard let data = parts[path], let root = try? XMLLite.parse(data) else { return nil }
+        // Picture fills in the theme name images relative to the theme part.
+        let relationships = Relationship.parse(parts[PackagePath.relationships(of: path)])
+        let image: (String) -> String? = { id in
+            relationships.first { $0.id == id && !$0.isExternal }.map { PackagePath.resolve($0.target, from: path) }
+        }
         let elements = root.firstChild(named: "themeElements")
         var colors = Theme.office.colors
         for slot in elements?.firstChild(named: "clrScheme")?.children ?? [] {
@@ -179,7 +184,7 @@ enum PPTXReader {
         let fonts = elements?.firstChild(named: "fontScheme")
         let format = elements?.firstChild(named: "fmtScheme")
         func fills(_ name: String) -> [Fill] {
-            format?.firstChild(named: name)?.children.compactMap { Fill.parse(element: $0) { _ in nil } } ?? []
+            format?.firstChild(named: name)?.children.compactMap { Fill.parse(element: $0, image: image) } ?? []
         }
         return Theme(
             colors: colors,

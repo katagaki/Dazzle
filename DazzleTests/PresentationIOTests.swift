@@ -246,3 +246,52 @@ struct RenderingTests {
         #expect(lighter.hsl.luminance > red.hsl.luminance)
     }
 }
+
+@Suite("Rendering fidelity")
+struct RenderingFidelityTests {
+    @Test("Group members are placed in slide space, not scaled")
+    func groupPlacement() {
+        let member = SlideShape(shapeID: 2, name: "", kind: .shape, frame: EMURect(x: 10, y: 20, width: 50, height: 25))
+        let placed = SlideRenderer.placed(
+            member, from: EMURect(x: 0, y: 0, width: 100, height: 100),
+            into: EMURect(x: 1_000, y: 2_000, width: 1_000, height: 2_000)
+        )
+        #expect(placed.frame == EMURect(x: 1_100, y: 2_400, width: 500, height: 500))
+    }
+
+    @Test("Table styles read fills, text and borders, including theme references")
+    func tableStyle() throws {
+        let xml = """
+            <a:tblStyle xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" styleId="x"><a:wholeTbl>\
+            <a:tcTxStyle><a:fontRef idx="minor"><a:prstClr val="black"/></a:fontRef><a:schemeClr val="tx1"/></a:tcTxStyle>\
+            <a:tcStyle><a:tcBdr><a:left><a:lnRef idx="1"><a:schemeClr val="accent1"/></a:lnRef></a:left></a:tcBdr>\
+            <a:fill><a:noFill/></a:fill></a:tcStyle></a:wholeTbl><a:firstRow><a:tcTxStyle b="on"><a:schemeClr val="bg1"/>\
+            </a:tcTxStyle><a:tcStyle><a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef></a:tcStyle></a:firstRow></a:tblStyle>
+            """
+        let style = TableStyle(element: try XMLLite.parse(Data(xml.utf8)))
+        #expect(style.whole.textColor == .scheme("tx1"))
+        #expect(style.whole.fill == Fill.none)
+        #expect(style.whole.borders["left"]?.fill == .solid(.scheme("accent1")))
+        #expect(style.headerRow.fill == .solid(.scheme("accent1")))
+        #expect(style.headerRow.isBold == true)
+        #expect(style.headerRow.textColor == .scheme("bg1"))
+    }
+
+    @Test("Radial gradients start where fillToRect puts them, and tiled pictures say so")
+    func fills() throws {
+        let gradient = try XMLLite.parse(Data("""
+            <gradFill><gsLst><gs pos="0"><srgbClr val="000000"/></gs><gs pos="100000"><srgbClr val="FFFFFF"/></gs></gsLst>\
+            <path path="circle"><fillToRect l="100000" t="100000"/></path></gradFill>
+            """.utf8))
+        guard case .gradient(let parsed) = Fill.parse(element: gradient, image: { _ in nil }) else {
+            Issue.record("Expected a gradient")
+            return
+        }
+        #expect(parsed.focusX == 1 && parsed.focusY == 1)
+
+        let tiled = try XMLLite.parse(Data("""
+            <blipFill xmlns:r="r"><blip r:embed="rId1"><alphaModFix amt="50000"/></blip><tile/></blipFill>
+            """.utf8))
+        #expect(Fill.parse(element: tiled, image: { _ in "ppt/media/a.png" }) == .tiledPicture(path: "ppt/media/a.png", opacity: 0.5))
+    }
+}

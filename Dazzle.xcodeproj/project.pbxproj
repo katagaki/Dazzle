@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		DA0000000000000000000050 /* DazzleWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = DA0000000000000000000021 /* DazzleWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DA0000000000000000000050 /* Dazzle Mini.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = DA0000000000000000000021 /* Dazzle Mini.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,7 +34,7 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				DA0000000000000000000050 /* DazzleWatch.app in Embed Watch Content */,
+				DA0000000000000000000050 /* Dazzle Mini.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -43,7 +43,7 @@
 
 /* Begin PBXFileReference section */
 		DA0000000000000000000020 /* Dazzle.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dazzle.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		DA0000000000000000000021 /* DazzleWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DazzleWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DA0000000000000000000021 /* Dazzle Mini.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dazzle Mini.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA0000000000000000000022 /* DazzleTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DazzleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -99,7 +99,7 @@
 			isa = PBXGroup;
 			children = (
 				DA0000000000000000000020 /* Dazzle.app */,
-				DA0000000000000000000021 /* DazzleWatch.app */,
+				DA0000000000000000000021 /* Dazzle Mini.app */,
 				DA0000000000000000000022 /* DazzleTests.xctest */,
 			);
 			name = Products;
@@ -132,9 +132,9 @@
 			productReference = DA0000000000000000000020 /* Dazzle.app */;
 			productType = "com.apple.product-type.application";
 		};
-		DA0000000000000000000031 /* DazzleWatch */ = {
+		DA0000000000000000000031 /* Dazzle Mini */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = DA0000000000000000000082 /* Build configuration list for PBXNativeTarget "DazzleWatch" */;
+			buildConfigurationList = DA0000000000000000000082 /* Build configuration list for PBXNativeTarget "Dazzle Mini" */;
 			buildPhases = (
 				DA0000000000000000000043 /* Sources */,
 				DA0000000000000000000044 /* Resources */,
@@ -147,11 +147,11 @@
 				DA0000000000000000000011 /* DazzleWatch */,
 				DA0000000000000000000012 /* Shared */,
 			);
-			name = DazzleWatch;
+			name = "Dazzle Mini";
 			packageProductDependencies = (
 			);
 			productName = DazzleWatch;
-			productReference = DA0000000000000000000021 /* DazzleWatch.app */;
+			productReference = DA0000000000000000000021 /* Dazzle Mini.app */;
 			productType = "com.apple.product-type.application";
 		};
 		DA0000000000000000000032 /* DazzleTests */ = {
@@ -216,7 +216,7 @@
 			projectRoot = "";
 			targets = (
 				DA0000000000000000000030 /* Dazzle */,
-				DA0000000000000000000031 /* DazzleWatch */,
+				DA0000000000000000000031 /* Dazzle Mini */,
 				DA0000000000000000000032 /* DazzleTests */,
 			);
 		};
@@ -266,7 +266,7 @@
 /* Begin PBXTargetDependency section */
 		DA0000000000000000000070 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = DA0000000000000000000031 /* DazzleWatch */;
+			target = DA0000000000000000000031 /* Dazzle Mini */;
 			targetProxy = DA0000000000000000000060 /* PBXContainerItemProxy */;
 		};
 		DA0000000000000000000071 /* PBXTargetDependency */ = {
@@ -560,7 +560,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		DA0000000000000000000082 /* Build configuration list for PBXNativeTarget "DazzleWatch" */ = {
+		DA0000000000000000000082 /* Build configuration list for PBXNativeTarget "Dazzle Mini" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				DA0000000000000000000094 /* Debug */,

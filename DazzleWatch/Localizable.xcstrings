@@ -1,391 +1,391 @@
 {
-  "sourceLanguage": "en",
-  "strings": {
-    "Remote.Blank": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Black Screen"
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Remote.Blank" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Black Screen"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "画面を黒くする"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を黒くする"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "화면 가리기"
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "화면 가리기"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "黑屏"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "黑屏"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "螢幕變黑"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "螢幕變黑"
           }
         }
       }
     },
-    "Remote.End": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "End"
+    "Remote.End" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "終了"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "종료"
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "종료"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "结束"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "結束"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結束"
           }
         }
       }
     },
-    "Remote.Idle.Message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open a presentation in Dazzle on your iPhone to control it from here."
+    "Remote.Idle.Message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a presentation in Dazzle on your iPhone to control it from here."
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iPhoneのDazzleでプレゼンテーションを開くと、ここから操作できます。"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhoneのDazzleでプレゼンテーションを開くと、ここから操作できます。"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iPhone의 Dazzle에서 프레젠테이션을 열면 여기에서 제어할 수 있습니다."
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone의 Dazzle에서 프레젠테이션을 열면 여기에서 제어할 수 있습니다."
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在 iPhone 上的 Dazzle 中打开演示文稿，即可在此控制。"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 iPhone 上的 Dazzle 中打开演示文稿，即可在此控制。"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在 iPhone 上的 Dazzle 中打開簡報，即可在此控制。"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 iPhone 上的 Dazzle 中打開簡報，即可在此控制。"
           }
         }
       }
     },
-    "Remote.Idle.Title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Not Presenting"
+    "Remote.Idle.Title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not Presenting"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "発表していません"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "発表していません"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "발표 중이 아님"
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발표 중이 아님"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未在演示"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未在演示"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未在簡報"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未在簡報"
           }
         }
       }
     },
-    "Remote.Idle.Unreachable": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Dazzle on your iPhone."
+    "Remote.Idle.Unreachable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Dazzle on your iPhone."
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iPhoneでDazzleを開いてください。"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhoneでDazzleを開いてください。"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iPhone에서 Dazzle을 여십시오."
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone에서 Dazzle을 여십시오."
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请在 iPhone 上打开 Dazzle。"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在 iPhone 上打开 Dazzle。"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "請在 iPhone 上打開 Dazzle。"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在 iPhone 上打開 Dazzle。"
           }
         }
       }
     },
-    "Remote.Next": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Next Slide"
+    "Remote.Next" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next Slide"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "次のスライド"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次のスライド"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "다음 슬라이드"
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 슬라이드"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "下一张幻灯片"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一张幻灯片"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "下一張投影片"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一張投影片"
           }
         }
       }
     },
-    "Remote.Position": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$ld of %2$ld"
+    "Remote.Position" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$ld of %2$ld"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$ld / %2$ld"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$ld / %2$ld"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$ld / %2$ld"
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$ld / %2$ld"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "第 %1$ld / %2$ld 张"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %1$ld / %2$ld 张"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "第 %1$ld / %2$ld 張"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %1$ld / %2$ld 張"
           }
         }
       }
     },
-    "Remote.Previous": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Previous Slide"
+    "Remote.Previous" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous Slide"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "前のスライド"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前のスライド"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이전 슬라이드"
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 슬라이드"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上一张幻灯片"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一张幻灯片"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上一張投影片"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一張投影片"
           }
         }
       }
     },
-    "Remote.Start": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Present"
+    "Remote.Start" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Present"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "発表"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "発表"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "발표"
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발표"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "演示"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "演示"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "簡報"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "簡報"
           }
         }
       }
     },
-    "Remote.Title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dazzle"
+    "Remote.Title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dazzle"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dazzle"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dazzle"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dazzle"
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dazzle"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dazzle"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dazzle"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dazzle"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dazzle"
           }
         }
       }
     },
-    "Remote.Unblank": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Slide"
+    "Remote.Unblank" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Slide"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "スライドを表示"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スライドを表示"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "슬라이드 보기"
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "슬라이드 보기"
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "显示幻灯片"
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示幻灯片"
           }
         },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "顯示投影片"
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示投影片"
           }
         }
       }
     }
   },
-  "version": "1.0"
+  "version" : "1.0"
 }

@@ -7,10 +7,19 @@
       "blend-mode" : "normal",
       "layers" : [
         {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ],
           "glass" : true,
           "hidden" : false,
           "image-name" : "Outline.svg",
           "name" : "Outline",
+          "opacity" : 0.5,
           "position-specializations" : [
             {
               "value" : {

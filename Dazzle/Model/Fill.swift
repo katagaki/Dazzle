@@ -21,6 +21,9 @@ enum Fill: Equatable, Hashable, Sendable {
         /// Degrees clockwise from left-to-right, for a linear gradient.
         var angle: Double
         var isRadial: Bool
+        /// Where a radial gradient starts, as fractions of the area.
+        var focusX = 0.5
+        var focusY = 0.5
     }
 
     /// Names of the elements a fill can be written as; finding one of these
@@ -51,7 +54,14 @@ enum Fill: Equatable, Hashable, Sendable {
             }.sorted { $0.position < $1.position }
             guard !stops.isEmpty else { return Fill.none }
             let angle = Double(element.firstChild(named: "lin")?.attribute("ang").flatMap(Int.init) ?? 0) / 60_000
-            return .gradient(Gradient(stops: stops, angle: angle, isRadial: element.firstChild(named: "path") != nil))
+            var gradient = Gradient(stops: stops, angle: angle, isRadial: element.firstChild(named: "path") != nil)
+            // `fillToRect` insets the focus from each edge; its centre is where the gradient starts.
+            if let focus = element.firstChild(named: "path")?.firstChild(named: "fillToRect") {
+                func inset(_ key: String) -> Double { Double(focus.attribute(key).flatMap(Int.init) ?? 0) / 100_000 }
+                gradient.focusX = (inset("l") + 1 - inset("r")) / 2
+                gradient.focusY = (inset("t") + 1 - inset("b")) / 2
+            }
+            return .gradient(gradient)
         case "blipFill":
             guard let reference = element.firstChild(named: "blip")?.attribute("embed"),
                   let path = image(reference) else { return Fill.none }

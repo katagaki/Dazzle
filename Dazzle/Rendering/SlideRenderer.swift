@@ -208,10 +208,15 @@ struct SlideRenderer {
             context.addPath(path)
             context.clip(using: .evenOdd)
             if gradient.isRadial {
-                let radius = hypot(bounds.width, bounds.height) / 2
+                let center = CGPoint(
+                    x: bounds.minX + bounds.width * gradient.focusX, y: bounds.minY + bounds.height * gradient.focusY
+                )
+                // Far enough to reach the corner furthest from the focus.
+                let radius = [bounds.minX, bounds.maxX].flatMap { x in
+                    [bounds.minY, bounds.maxY].map { y in hypot(x - center.x, y - center.y) }
+                }.max() ?? 0
                 context.drawRadialGradient(
-                    cgGradient, startCenter: CGPoint(x: bounds.midX, y: bounds.midY), startRadius: 0,
-                    endCenter: CGPoint(x: bounds.midX, y: bounds.midY), endRadius: radius,
+                    cgGradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius,
                     options: [.drawsAfterEndLocation]
                 )
             } else {

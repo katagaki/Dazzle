@@ -62,7 +62,8 @@ enum PPTXReader {
             tableStyles: readTableStyles(
                 mainRelationships.first { $0.type.hasSuffix("/tableStyles") }
                     .flatMap { parts[PackagePath.resolve($0.target, from: mainPart)] }
-            )
+            ),
+            embeddedFonts: readEmbeddedFonts(main.firstChild(named: "embeddedFontLst"), parts: parts, target: target)
         )
 
         func part(of type: String) -> Data? {
@@ -111,6 +112,25 @@ enum PPTXReader {
         }
         presentation.resolveSlideLinks()
         return presentation
+    }
+
+    // MARK: - Embedded fonts
+
+    /// `p:embeddedFontLst`: each typeface and the files for its styles. They
+    /// are decoded only once text asks for them.
+    private static func readEmbeddedFonts(
+        _ list: XMLElement?, parts: [String: Data], target: (String?) -> String?
+    ) -> EmbeddedFonts {
+        var files: [String: [EmbeddedFonts.Face: Data]] = [:]
+        for entry in list?.children(named: "embeddedFont") ?? [] {
+            guard let typeface = entry.firstChild(named: "font")?.attribute("typeface")?.nilIfEmpty else { continue }
+            let styles = [("regular", false, false), ("bold", true, false), ("italic", false, true), ("boldItalic", true, true)]
+            for (style, bold, italic) in styles {
+                guard let path = target(entry.firstChild(named: style)?.relationshipID), let data = parts[path] else { continue }
+                files[typeface, default: [:]][EmbeddedFonts.Face(isBold: bold, isItalic: italic)] = data
+            }
+        }
+        return files.isEmpty ? .none : EmbeddedFonts(files: files)
     }
 
     // MARK: - Masters and layouts

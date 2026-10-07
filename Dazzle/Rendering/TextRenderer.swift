@@ -285,7 +285,8 @@ struct TextRenderer {
         if run.baseline.map({ $0 != 0 }) == true { size *= 2 / 3 }
         let family = style.typeface(run.latinFont) ?? style.theme.minorFont
         let font = FontResolver.shared.font(
-            family: family, size: max(size, 1), bold: run.isBold ?? false, italic: run.isItalic ?? false
+            family: family, size: max(size, 1), bold: run.isBold ?? false, italic: run.isItalic ?? false,
+            embedded: style.resources.embeddedFonts
         )
         let color = colorOverride ?? run.color.map { style.color($0) } ?? style.color(.scheme("tx1"))
         var attributes: [NSAttributedString.Key: Any] = [

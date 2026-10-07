@@ -12,12 +12,16 @@ final class DeckResources: Equatable, Sendable {
     let notesMasterPath: String?
     /// Table styles the file defines, by id.
     let tableStyles: [String: TableStyle]
+    /// Fonts the file carries inside it.
+    let embeddedFonts: EmbeddedFonts
 
     init(
         masters: [String: SlideMaster], layouts: [String: SlideLayout], layoutOrder: [String],
-        defaultTextStyle: ListStyle, notesMasterPath: String?, tableStyles: [String: TableStyle] = [:]
+        defaultTextStyle: ListStyle, notesMasterPath: String?, tableStyles: [String: TableStyle] = [:],
+        embeddedFonts: EmbeddedFonts = .none
     ) {
         self.tableStyles = tableStyles
+        self.embeddedFonts = embeddedFonts
         self.masters = masters
         self.layouts = layouts
         self.layoutOrder = layoutOrder

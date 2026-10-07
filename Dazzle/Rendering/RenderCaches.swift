@@ -68,14 +68,23 @@ final class ImageCache: @unchecked Sendable {
     }
 }
 
-/// Fonts by family, size and style. Families iOS does not have — Calibri,
-/// Aptos and the other Office faces — are drawn in the closest one it does.
+/// Fonts by family, size and style. A font the presentation carries comes
+/// first; families iOS does not have — Calibri, Aptos and the other Office
+/// faces — are drawn in the closest one it does.
 final class FontResolver: @unchecked Sendable {
     static let shared = FontResolver()
 
     private let cache = NSCache<NSString, CTFont>()
 
-    func font(family: String?, size: CGFloat, bold: Bool, italic: Bool) -> CTFont {
+    func font(family: String?, size: CGFloat, bold: Bool, italic: Bool, embedded: EmbeddedFonts = .none) -> CTFont {
+        if let family, let descriptor = embedded.descriptor(family: family, bold: bold, italic: italic) {
+            let key = "\(embedded.id)|\(family)|\(size)|\(bold)|\(italic)" as NSString
+            if let cached = cache.object(forKey: key) { return cached }
+            let font = CTFontCreateWithFontDescriptor(descriptor, size, nil)
+            cache.setObject(font, forKey: key)
+            return font
+        }
+
         let key = "\(family ?? "")|\(size)|\(bold)|\(italic)" as NSString
         if let cached = cache.object(forKey: key) { return cached }
 

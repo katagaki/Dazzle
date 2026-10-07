@@ -83,7 +83,10 @@ enum EditableText {
         var size = CGFloat(run.size ?? 1_800) / 100 * scale
         if run.baseline.map({ $0 != 0 }) == true { size *= 2 / 3 }
         let family = style.typeface(run.latinFont) ?? style.theme.minorFont
-        let font = FontResolver.shared.font(family: family, size: max(size, 1), bold: run.isBold ?? false, italic: run.isItalic ?? false)
+        let font = FontResolver.shared.font(
+            family: family, size: max(size, 1), bold: run.isBold ?? false, italic: run.isItalic ?? false,
+            embedded: style.resources.embeddedFonts
+        )
         let color = run.color.map { style.color($0) } ?? style.color(.scheme("tx1"))
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font as UIFont,

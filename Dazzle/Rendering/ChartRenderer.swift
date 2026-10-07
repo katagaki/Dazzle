@@ -443,7 +443,9 @@ struct ChartRenderer {
     }
 
     private func font(size: CGFloat) -> CTFont {
-        FontResolver.shared.font(family: style.theme.minorFont, size: size, bold: false, italic: false)
+        FontResolver.shared.font(
+            family: style.theme.minorFont, size: size, bold: false, italic: false, embedded: style.resources.embeddedFonts
+        )
     }
 
     private func measure(_ text: String, size: CGFloat) -> CGSize {

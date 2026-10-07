@@ -264,6 +264,17 @@ struct DeckView: View {
                     state.presentedPanel = .export
                 }
                 .accessibilityIdentifier("exportImages")
+                Button("Share.Video", systemImage: "film") {
+                    state.exportFormat = .video
+                    state.presentedPanel = .export
+                }
+                .accessibilityIdentifier("exportVideo")
+                Button("Share.Print", systemImage: "printer") {
+                    state.exportFormat = .pdf
+                    state.presentedPanel = .export
+                }
+                .keyboardShortcut("p", modifiers: .command)
+                .accessibilityIdentifier("exportPrint")
             } label: {
                 Image(systemName: "square.and.arrow.up")
             }

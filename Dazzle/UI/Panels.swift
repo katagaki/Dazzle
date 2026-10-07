@@ -554,6 +554,10 @@ struct ExportPanel: View {
     var name: String
 
     @State private var options = ExportOptions()
+    /// The movie made for sharing, and how far making it has got.
+    @State private var video: URL?
+    @State private var videoProgress: Double?
+    @State private var videoTask: Task<Void, Never>?
 
     private var slides: [Slide] {
         switch options.scope {
@@ -572,6 +576,7 @@ struct ExportPanel: View {
                 Picker("Export.Format", selection: $options.format) {
                     Text("Export.Format.PDF").tag(ExportOptions.Format.pdf)
                     Text("Export.Format.Images").tag(ExportOptions.Format.images)
+                    Text("Export.Format.Video").tag(ExportOptions.Format.video)
                 }
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
@@ -589,6 +594,51 @@ struct ExportPanel: View {
                 }
                 if options.scope == .chosen {
                     slidePicker
+                }
+            }
+
+            if options.format == .pdf {
+                Section("Export.Section.Layout") {
+                    Picker("Export.Layout", selection: Binding(
+                        get: { Self.layoutKind(options.pageLayout) },
+                        set: { kind in
+                            options.pageLayout = switch kind {
+                            case 1: .notes
+                            case 2: .handouts(perPage: 3)
+                            default: .slides
+                            }
+                        }
+                    )) {
+                        Text("Export.Layout.Slides").tag(0)
+                        Text("Export.Layout.Notes").tag(1)
+                        Text("Export.Layout.Handouts").tag(2)
+                    }
+                    if case .handouts(let count) = options.pageLayout {
+                        Picker("Export.Layout.PerPage", selection: Binding(
+                            get: { count }, set: { options.pageLayout = .handouts(perPage: $0) }
+                        )) {
+                            ForEach(SlideExporter.PageLayout.handoutCounts, id: \.self) { count in
+                                Text(verbatim: String(count)).tag(count)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if options.format == .video {
+                Section("Export.Section.Video") {
+                    Picker("Export.Resolution", selection: $options.resolution) {
+                        Text(verbatim: "720p").tag(ExportOptions.Resolution.standard)
+                        Text(verbatim: "1080p").tag(ExportOptions.Resolution.high)
+                        Text(verbatim: "4K").tag(ExportOptions.Resolution.ultra)
+                    }
+                    LabeledContent("Export.SecondsPerSlide") {
+                        Stepper(value: $options.secondsPerSlide, in: 1...60, step: 1) {
+                            Text(String(format: String(localized: "Export.Seconds"), Int(options.secondsPerSlide)))
+                                .monospacedDigit()
+                        }
+                        .fixedSize()
+                    }
                 }
             }
 
@@ -611,11 +661,19 @@ struct ExportPanel: View {
                 shareButton
                     .frame(maxWidth: .infinity)
                     .disabled(slides.isEmpty)
+                if options.format == .pdf {
+                    Button("Export.Print", systemImage: "printer") { print() }
+                        .frame(maxWidth: .infinity)
+                        .disabled(slides.isEmpty)
+                        .accessibilityIdentifier("print")
+                }
             } footer: {
                 Text(String.localizedStringWithFormat(String(localized: "Export.Count"), slides.count))
                     .frame(maxWidth: .infinity)
             }
         }
+        .onChange(of: options) { _, _ in video = nil }
+        .onDisappear { videoTask?.cancel() }
         .onAppear {
             options.format = state.exportFormat
             if let slide = state.selectedSlide(in: presentation) { options.chosenSlideIDs = [slide.id] }
@@ -628,7 +686,7 @@ struct ExportPanel: View {
         switch options.format {
         case .pdf:
             ShareLink(
-                item: PDFExport(presentation: presentation, slides: slides, name: name),
+                item: PDFExport(presentation: presentation, slides: slides, name: name, layout: options.pageLayout),
                 preview: SharePreview(name, image: Image(systemName: "doc.richtext"))
             ) { label }
             .accessibilityIdentifier("sharePDF")
@@ -648,6 +706,77 @@ struct ExportPanel: View {
                 label
             }
             .accessibilityIdentifier("shareImages")
+        case .video:
+            if let video {
+                ShareLink(item: video) { label }
+                    .accessibilityIdentifier("shareVideo")
+            } else if let videoProgress {
+                VStack(spacing: 6) {
+                    ProgressView(value: videoProgress)
+                    Button("Common.Cancel", role: .cancel) {
+                        videoTask?.cancel()
+                        videoTask = nil
+                        self.videoProgress = nil
+                    }
+                }
+            } else {
+                Button {
+                    makeVideo()
+                } label: {
+                    Label("Export.MakeVideo", systemImage: "film").fontWeight(.semibold)
+                }
+                .accessibilityIdentifier("makeVideo")
+            }
+        }
+    }
+
+    private static func layoutKind(_ layout: SlideExporter.PageLayout) -> Int {
+        switch layout {
+        case .slides: 0
+        case .notes: 1
+        case .handouts: 2
+        }
+    }
+
+    private func print() {
+        let data = SlideExporter.pdf(of: slides, in: presentation, title: name, layout: options.pageLayout)
+        let controller = UIPrintInteractionController.shared
+        let info = UIPrintInfo.printInfo()
+        info.jobName = name
+        info.outputType = .general
+        controller.printInfo = info
+        controller.printingItem = data
+        controller.present(animated: true)
+    }
+
+    /// Renders the movie in the background, then offers it to share.
+    private func makeVideo() {
+        let slides = slides
+        let presentation = presentation
+        let width = options.resolution.rawValue
+        let durations = slides.map { _ in options.secondsPerSlide }
+        let name = name
+        videoProgress = 0
+        videoTask = Task {
+            do {
+                let directory = FileManager.default.temporaryDirectory
+                    .appending(path: "Share-\(UUID().uuidString)", directoryHint: .isDirectory)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let url = directory.appending(path: "\(ExportFile.sanitized(name)).mp4")
+                try await Task.detached(priority: .userInitiated) {
+                    try await VideoExporter.export(
+                        slides, of: presentation, width: width, durations: durations, to: url
+                    ) { fraction in
+                        Task { @MainActor in if videoProgress != nil { videoProgress = fraction } }
+                    }
+                }.value
+                video = url
+            } catch is CancellationError {
+                // Stopped by the person waiting for it.
+            } catch {
+                state.errorMessage = error.localizedDescription
+            }
+            videoProgress = nil
         }
     }
 

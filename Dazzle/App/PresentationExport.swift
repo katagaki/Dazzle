@@ -7,6 +7,7 @@ struct ExportOptions: Equatable, Sendable {
     enum Format: String, CaseIterable, Identifiable, Sendable {
         case pdf
         case images
+        case video
 
         var id: Self { self }
     }
@@ -34,6 +35,8 @@ struct ExportOptions: Equatable, Sendable {
     var resolution: Resolution = .high
     var includesHiddenSlides = false
     var chosenSlideIDs: Set<Slide.ID> = []
+    var pageLayout: SlideExporter.PageLayout = .slides
+    var secondsPerSlide = 5.0
 }
 
 /// Wraps the presentation so it can be handed to `ShareLink`, written only
@@ -57,11 +60,12 @@ struct PDFExport: Transferable, Sendable {
     var presentation: Presentation
     var slides: [Slide]
     var name: String
+    var layout: SlideExporter.PageLayout = .slides
 
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(exportedContentType: .pdf) { export in
             SentTransferredFile(try ExportFile.write(name: export.name, extension: "pdf") {
-                SlideExporter.pdf(of: export.slides, in: export.presentation, title: export.name)
+                SlideExporter.pdf(of: export.slides, in: export.presentation, title: export.name, layout: export.layout)
             })
         }
         .suggestedFileName { $0.name + ".pdf" }
@@ -100,7 +104,7 @@ struct SlideImageExport: Transferable, Sendable {
     }
 }
 
-private enum ExportFile {
+enum ExportFile {
     static func write(name: String, extension pathExtension: String, encode: () throws -> Data) throws -> URL {
         // A per-export directory keeps concurrent shares from colliding on name.
         let directory = FileManager.default.temporaryDirectory

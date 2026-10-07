@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreGraphics
 import Foundation
 import SwiftUI
@@ -1105,5 +1106,33 @@ struct HeaderFooterTests {
     func dateField() {
         let date = Date(timeIntervalSince1970: 1_767_225_600)
         #expect(DateField.datetime1.string(for: date, locale: Locale(identifier: "en_US")).contains("2026"))
+    }
+}
+
+@Suite("Export")
+struct ExportTests {
+    @Test("Notes pages and handouts lay slides out on paper")
+    func pageLayouts() throws {
+        var presentation = Presentation.blank
+        presentation.slides[0].notes = "Remember to thank the team."
+        let slides = Array(repeating: presentation.slides[0], count: 7)
+        for (layout, pages) in [(SlideExporter.PageLayout.notes, 7), (.handouts(perPage: 3), 3), (.handouts(perPage: 9), 1)] {
+            let data = SlideExporter.pdf(of: slides, in: presentation, title: "Test", layout: layout)
+            let document = try #require(CGPDFDocument(CGDataProvider(data: data as CFData)!))
+            #expect(document.numberOfPages == pages)
+            #expect(document.page(at: 1)?.getBoxRect(.mediaBox).size == SlideExporter.paperSize)
+        }
+    }
+
+    @Test("Slides make a movie of the right length")
+    func video() async throws {
+        let presentation = Presentation.blank
+        let url = FileManager.default.temporaryDirectory.appending(path: "dazzle-test.mp4")
+        try await VideoExporter.export(
+            presentation.slides + presentation.slides, of: presentation, width: 320, durations: [1, 2], to: url
+        ) { _ in }
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration).seconds
+        #expect(abs(duration - 3) < 0.1)
     }
 }

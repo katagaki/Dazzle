@@ -1,12 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <!--
-    The monitor: a screen held back so what is on it carries the weight, on
-    a stand drawn lighter still. Drawn in white — Icon Composer tints and
-    lights the layer, so the artwork carries only shape and opacity.
+    The monitor: a screen held back so what is on it carries the weight,
+    centred on the canvas. Drawn in white — Icon Composer tints and lights
+    the layer, so the artwork carries only shape and opacity.
   -->
-  <g fill="#FFFFFF">
-    <path d="M220 236H804A48 48 0 0 1 852 284V636A48 48 0 0 1 804 684H220A48 48 0 0 1 172 636V284A48 48 0 0 1 220 236Z" opacity="0.32"/>
-    <path d="M496 684H528V780H496Z" opacity="0.6"/>
-    <path d="M408 772H616A16 16 0 0 1 632 788A16 16 0 0 1 616 804H408A16 16 0 0 1 392 788A16 16 0 0 1 408 772Z" opacity="0.6"/>
-  </g>
+  <path fill="#FFFFFF" d="M220 288H804A48 48 0 0 1 852 336V688A48 48 0 0 1 804 736H220A48 48 0 0 1 172 688V336A48 48 0 0 1 220 288Z" opacity="0.32"/>
 </svg>

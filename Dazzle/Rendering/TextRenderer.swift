@@ -183,7 +183,13 @@ struct TextRenderer {
             for run in paragraph.runs {
                 let runProperties = run.properties.merged(over: properties.defaultRun)
                 var text = run.text
-                if case .field(let type) = run.kind, type == "slidenum" { text = String(slideNumber) }
+                if case .field(let type) = run.kind {
+                    if type == "slidenum" {
+                        text = String(slideNumber)
+                    } else if let date = DateField(rawValue: type) {
+                        text = date.string(for: Date())
+                    }
+                }
                 if runProperties.capitalization == "all" { text = text.uppercased() }
                 text = Self.symbolsMapped(text)
                 result.append(NSAttributedString(
@@ -414,3 +420,39 @@ struct TextRenderer {
         return result
     }
 }
+
+/// The date and time fields PowerPoint fills in as the slide is shown,
+/// by the `type` each writes.
+enum DateField: String, CaseIterable, Identifiable, Sendable {
+    case datetime1, datetime2, datetime3, datetime4, datetime5, datetime6, datetime7
+    case datetime8, datetime9, datetime10, datetime11, datetime12, datetime13
+
+    var id: Self { self }
+
+    /// The pattern each shows, as a template the locale arranges.
+    private var template: String {
+        switch self {
+        case .datetime1: "yMd"
+        case .datetime2: "EEEEyMMMMd"
+        case .datetime3: "dMMMMy"
+        case .datetime4: "MMMMdy"
+        case .datetime5: "dMMMyy"
+        case .datetime6: "MMMMyy"
+        case .datetime7: "MMMyy"
+        case .datetime8: "yMdjmm"
+        case .datetime9: "yMdjmmss"
+        case .datetime10: "Hmm"
+        case .datetime11: "Hmmss"
+        case .datetime12: "hmma"
+        case .datetime13: "hmmssa"
+        }
+    }
+
+    func string(for date: Date, locale: Locale = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.setLocalizedDateFormatFromTemplate(template)
+        return formatter.string(from: date)
+    }
+}
+

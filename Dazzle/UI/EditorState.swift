@@ -9,6 +9,7 @@ enum EditorPanel: String, Identifiable, Hashable {
     case find
     case chart
     case comments
+    case headerFooter
 
     var id: String { rawValue }
 
@@ -17,6 +18,7 @@ enum EditorPanel: String, Identifiable, Hashable {
         case .find: String(localized: "Panel.Find.Title")
         case .chart: String(localized: "Panel.Chart.Title")
         case .comments: String(localized: "Panel.Comments.Title")
+        case .headerFooter: String(localized: "Panel.HeaderFooter.Title")
         case .text: String(localized: "Panel.Text.Title")
         case .format: String(localized: "Panel.Format.Title")
         case .notes: String(localized: "Panel.Notes.Title")

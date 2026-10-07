@@ -1065,3 +1065,45 @@ struct CommentTests {
         #expect(written.components(separatedBy: "sldMkLst").count - 1 == 4)
     }
 }
+
+@Suite("Header and footer")
+@MainActor
+struct HeaderFooterTests {
+    @Test("Slide numbers, dates and footers go in the layout's placeholders, and come off again")
+    func apply() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        let layout = try #require(presentation.resources.orderedLayouts.first { $0.name == "Title and Content" })
+        state.selectSlide(presentation.slides[0].id)
+        state.addSlide(using: layout, in: &presentation)
+        var settings = HeaderFooterSettings()
+        settings.showsSlideNumber = true
+        settings.showsFooter = true
+        settings.footer = "Confidential"
+        settings.showsDate = true
+        settings.hidesOnTitleSlide = true
+        state.applyHeaderFooter(settings, toAll: true, in: &presentation)
+
+        let copy = try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+        #expect(!copy.slides[0].shapes.contains { $0.placeholder?.isFurniture == true })
+        let reread = HeaderFooterSettings(slide: copy.slides[1])
+        #expect(reread.showsSlideNumber && reread.showsFooter && reread.showsDate && reread.updatesDate)
+        #expect(reread.footer == "Confidential")
+        let number = try #require(copy.slides[1].shapes.first { $0.placeholder?.type == "sldNum" })
+        let template = layout.shapes.first { $0.placeholder?.type == "sldNum" }
+            ?? copy.resources.master(for: layout)?.shapes.first { $0.placeholder?.type == "sldNum" }
+        #expect(number.frame == template?.frame)
+
+        var off = copy
+        let reopened = EditorState()
+        reopened.selectSlide(off.slides[1].id)
+        reopened.applyHeaderFooter(HeaderFooterSettings(), toAll: false, in: &off)
+        #expect(!off.slides[1].shapes.contains { $0.placeholder?.isFurniture == true })
+    }
+
+    @Test("Date fields show today's date")
+    func dateField() {
+        let date = Date(timeIntervalSince1970: 1_767_225_600)
+        #expect(DateField.datetime1.string(for: date, locale: Locale(identifier: "en_US")).contains("2026"))
+    }
+}

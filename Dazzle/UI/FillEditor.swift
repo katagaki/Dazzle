@@ -148,8 +148,9 @@ struct FillEditor: View {
 
     @ViewBuilder
     private var pictureControls: some View {
+        let label = String(localized: currentKind == .picture ? "Fill.Picture.Change" : "Fill.Picture.Choose")
         PhotosPicker(selection: $photo, matching: .images) {
-            Label(currentKind == .picture ? "Fill.Picture.Change" : "Fill.Picture.Choose", systemImage: "photo")
+            Label(label, systemImage: "photo")
         }
         .accessibilityIdentifier("\(identifier).picture")
         .onChange(of: photo) { _, item in

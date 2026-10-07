@@ -62,8 +62,9 @@ struct FloatingActionBar: View {
             shapeMenu
             tableMenu
             chartMenu
+            let isPreparing = isPreparingVideo
             PhotosPicker(selection: $photo, matching: .any(of: [.images, .videos])) {
-                ActionSymbol(name: isPreparingVideo ? "hourglass" : "photo", isOn: isPreparingVideo)
+                ActionSymbol(name: isPreparing ? "hourglass" : "photo", isOn: isPreparing)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("insertPhoto")

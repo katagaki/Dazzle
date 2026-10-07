@@ -29,6 +29,12 @@ final class PresentationSession {
     private(set) var externalDisplayCount = 0
     /// The current slide's videos and sounds.
     let media = MediaPlayback()
+    /// Whether the show starts over after its last slide.
+    private(set) var loops = false
+    /// Moving on by itself, after the current slide's time.
+    @ObservationIgnored private var advanceTask: Task<Void, Never>?
+    /// What the running wait is for, so publishing again does not restart it.
+    @ObservationIgnored private var advanceFor: (position: Int, blanked: Bool, presenting: Bool)?
 
     var hasExternalDisplay: Bool { externalDisplayCount > 0 }
 
@@ -53,6 +59,7 @@ final class PresentationSession {
         isBlanked = false
         startedAt = Date()
         ownerID = owner
+        loops = presentation.loopsSlideshow
         isPresenting = true
         publish()
     }
@@ -78,11 +85,33 @@ final class PresentationSession {
             isBlanked = false
         } else if position < order.count - 1 {
             position += 1
+        } else if loops {
+            position = 0
         } else {
             // Moving on from the last slide ends the show, as in Keynote.
             return end()
         }
         publish()
+    }
+
+    /// Whether a tap on the slide moves the show on, as the slide says.
+    var advancesOnTap: Bool { currentSlide?.advancesOnClick ?? true }
+
+    /// Waits out the current slide's time, if it has one, then moves on.
+    private func scheduleAdvance() {
+        let now = (position: position, blanked: isBlanked, presenting: isPresenting)
+        if let advanceFor, advanceFor == now { return }
+        advanceFor = now
+        advanceTask?.cancel()
+        advanceTask = nil
+        guard isPresenting, !isBlanked, let seconds = currentSlide?.autoAdvanceAfter else { return }
+        let shown = position
+        advanceTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(seconds, 0.1)))
+            guard !Task.isCancelled, let self, self.isPresenting, self.position == shown, !self.isBlanked else { return }
+            self.advanceFor = nil
+            self.next()
+        }
     }
 
     func previous() {
@@ -199,6 +228,7 @@ final class PresentationSession {
 
     private func publish() {
         media.show(isPresenting ? currentSlide : nil, in: presentation)
+        scheduleAdvance()
         var state = RemoteState()
         state.canStart = !candidates.isEmpty
         state.title = isPresenting ? title : candidates.last?.title ?? ""

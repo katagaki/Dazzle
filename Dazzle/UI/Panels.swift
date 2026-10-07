@@ -503,6 +503,11 @@ struct FormatPanel: View {
                     }
                 }
                 .accessibilityIdentifier("slideSize")
+                Toggle("Format.LoopSlideshow", isOn: Binding(
+                    get: { presentation.loopsSlideshow },
+                    set: { state.setLoopsSlideshow($0, in: &presentation) }
+                ))
+                .accessibilityIdentifier("loopSlideshow")
                 .confirmationDialog(
                     "SlideSize.Scaling.Title", isPresented: Binding(get: { pendingSize != nil }, set: { if !$0 { pendingSize = nil } }),
                     titleVisibility: .visible
@@ -518,6 +523,38 @@ struct FormatPanel: View {
                 } message: {
                     Text("SlideSize.Scaling.Message")
                 }
+            }
+
+            Section {
+                Toggle("Advance.Automatically", isOn: Binding(
+                    get: { slide.autoAdvanceAfter != nil },
+                    set: { state.setAutoAdvance($0 ? 5 : nil, in: &presentation) }
+                ))
+                .accessibilityIdentifier("autoAdvance")
+                if let seconds = slide.autoAdvanceAfter {
+                    LabeledContent("Advance.After") {
+                        Stepper(
+                            value: Binding(get: { seconds }, set: { state.setAutoAdvance(max($0, 0.5), in: &presentation) }),
+                            in: 0.5...3_600, step: seconds < 5 ? 0.5 : 1
+                        ) {
+                            Text(seconds.formatted(.number.precision(.fractionLength(0...1))) + " " + String(localized: "Advance.Seconds"))
+                                .monospacedDigit()
+                        }
+                        .fixedSize()
+                    }
+                    Toggle("Advance.OnTap", isOn: Binding(
+                        get: { slide.advancesOnClick },
+                        set: { state.setAdvancesOnClick($0, in: &presentation) }
+                    ))
+                }
+                Button("Advance.ApplyToAll", systemImage: "square.stack.3d.down.right") {
+                    state.setAutoAdvance(slide.autoAdvanceAfter, toAll: true, in: &presentation)
+                    state.setAdvancesOnClick(slide.advancesOnClick, toAll: true, in: &presentation)
+                }
+            } header: {
+                Text("Format.Section.Advance")
+            } footer: {
+                Text("Advance.Footer")
             }
 
             Section("Format.Section.Slide") {
@@ -769,7 +806,8 @@ struct ExportPanel: View {
         let slides = slides
         let presentation = presentation
         let width = options.resolution.rawValue
-        let durations = slides.map { _ in options.secondsPerSlide }
+        // Slides that move on by themselves keep their own time.
+        let durations = slides.map { $0.autoAdvanceAfter ?? options.secondsPerSlide }
         let name = name
         videoProgress = 0
         videoTask = Task {

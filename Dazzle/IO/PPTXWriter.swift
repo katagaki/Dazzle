@@ -66,6 +66,9 @@ private struct PackageBuilder {
         if presentation.isStructureModified || createdNotesMasterRelationship != nil {
             try writePresentationPart()
         }
+        if presentation.isShowSettingsModified {
+            try writeShowSettings()
+        }
         parts[PackagePath.relationships(of: mainPart)] = Relationship.xml(mainRelationships)
         parts["[Content_Types].xml"] = contentTypes.data
     }
@@ -147,7 +150,7 @@ private struct PackageBuilder {
             if slide.canEditShapes || slide.sourcePart == nil {
                 parts[path] = try slideXML(for: &slide, path: path)
             } else if let source = slide.sourcePart {
-                parts[path] = presentation.package.parts[source]
+                parts[path] = try settingsPatched(presentation.package.parts[source], for: slide, path: path)
             }
         }
 
@@ -179,6 +182,7 @@ private struct PackageBuilder {
             tree.insertChild(element, at: tree.children.count)
         }
         root.setAttribute("show", slide.isHidden ? "0" : nil)
+        if slide.isTransitionModified { writeTransition(of: slide, into: root) }
         if slide.isBackgroundModified {
             if let existing = common.firstChild(named: "bg") { common.removeChild(existing) }
             if case .fill(let fill) = slide.background,
@@ -195,6 +199,65 @@ private struct PackageBuilder {
         }
         guard let xml = XMLLite.serialize(root) else { throw PresentationWriteError.unwritablePart(path) }
         return Data((PackagePath.declaration + xml).utf8)
+    }
+
+    /// A slide whose shapes cannot be rewritten, with only whether it is
+    /// hidden and how it advances changed.
+    private func settingsPatched(_ data: Data?, for slide: Slide, path: String) throws -> Data? {
+        guard let data, let root = try? XMLLite.parse(data) else { throw PresentationWriteError.unwritablePart(path) }
+        root.setAttribute("show", slide.isHidden ? "0" : nil)
+        if slide.isTransitionModified { writeTransition(of: slide, into: root) }
+        guard let xml = XMLLite.serialize(root) else { throw PresentationWriteError.unwritablePart(path) }
+        return Data((PackagePath.declaration + xml).utf8)
+    }
+
+    /// Sets how the slide advances on its transition, every version of it,
+    /// making one if it has none.
+    private func writeTransition(of slide: Slide, into root: XMLElement) {
+        let advance = slide.autoAdvanceAfter.map { String(Int(($0 * 1_000).rounded())) }
+        var transitions = PPTXReader.transitions(in: root)
+        if transitions.isEmpty {
+            guard advance != nil || !slide.advancesOnClick,
+                  let created = XMLLite.fragment("<p:transition/>", namespaces: OOXML.namespaces) else { return }
+            // After the slide's colour mapping; before its timing and extensions.
+            let after = root.children.lastIndex { ["cSld", "clrMapOvr"].contains($0.name) }
+            root.insertChild(created, at: (after ?? 0) + 1)
+            transitions = [created]
+        }
+        for transition in transitions {
+            transition.setAttribute("advTm", advance)
+            transition.setAttribute("advClick", slide.advancesOnClick ? nil : "0")
+        }
+    }
+
+    // MARK: - Show settings
+
+    /// Whether the slideshow loops, in the presentation's properties.
+    private mutating func writeShowSettings() throws {
+        let existing = mainRelationships.first { $0.type == OOXML.RelationshipType.presProps }
+            .map { PackagePath.resolve($0.target, from: mainPart) }
+        let path = existing ?? "ppt/presProps.xml"
+        let base = existing.flatMap { parts[$0] } ?? Data("""
+            <p:presentationPr xmlns:a="\(OOXML.drawingML)" xmlns:r="\(OOXML.relationshipsNS)" xmlns:p="\(OOXML.presentationML)"/>
+            """.utf8)
+        guard let root = try? XMLLite.parse(base) else { throw PresentationWriteError.unwritablePart(path) }
+        let settings = root.firstChild(named: "showPr") ?? {
+            let created = XMLLite.fragment("<p:showPr showNarration=\"1\"/>", namespaces: OOXML.namespaces)
+            // After the publishing and printing settings, before colours and extensions.
+            let after = root.children.lastIndex { ["htmlPubPr", "webPr", "prnPr"].contains($0.name) }
+            if let created { root.insertChild(created, at: (after ?? -1) + 1) }
+            return created
+        }()
+        settings?.setAttribute("loop", presentation.loopsSlideshow ? "1" : nil)
+        guard let xml = XMLLite.serialize(root) else { throw PresentationWriteError.unwritablePart(path) }
+        parts[path] = Data((PackagePath.declaration + xml).utf8)
+        if existing == nil {
+            contentTypes.setOverride("application/vnd.openxmlformats-officedocument.presentationml.presProps+xml", for: path)
+            mainRelationships.append(Relationship(
+                id: Relationship.unusedID(in: mainRelationships), type: OOXML.RelationshipType.presProps,
+                target: PackagePath.relativeTarget(to: path, from: mainPart)
+            ))
+        }
     }
 
     // MARK: - Comments

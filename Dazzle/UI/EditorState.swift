@@ -288,6 +288,32 @@ final class EditorState {
         return letters.isEmpty ? String(name.prefix(2)) : letters.uppercased()
     }
 
+    // MARK: - Advancing
+
+    /// How long the slide stays before the show moves on by itself, or
+    /// with `nil`, until tapped. Applied to every slide with `toAll`.
+    func setAutoAdvance(_ seconds: Double?, toAll: Bool = false, in presentation: inout Presentation) {
+        updateTransitions(toAll: toAll, in: &presentation) { $0.autoAdvanceAfter = seconds }
+    }
+
+    func setAdvancesOnClick(_ isOn: Bool, toAll: Bool = false, in presentation: inout Presentation) {
+        updateTransitions(toAll: toAll, in: &presentation) { $0.advancesOnClick = isOn }
+    }
+
+    private func updateTransitions(toAll: Bool, in presentation: inout Presentation, _ change: (inout Slide) -> Void) {
+        let indices = toAll ? Array(presentation.slides.indices) : [selectedIndex(in: presentation)]
+        for index in indices where presentation.slides.indices.contains(index) {
+            change(&presentation.slides[index])
+            presentation.slides[index].isTransitionModified = true
+            presentation.slides[index].isModified = true
+        }
+    }
+
+    func setLoopsSlideshow(_ isOn: Bool, in presentation: inout Presentation) {
+        presentation.loopsSlideshow = isOn
+        presentation.isShowSettingsModified = true
+    }
+
     func setBackground(_ fill: Fill?, in presentation: inout Presentation) {
         let index = selectedIndex(in: presentation)
         guard presentation.slides.indices.contains(index) else { return }

@@ -1241,3 +1241,40 @@ struct MediaTests {
         #expect(timedPicture.media?.playsAutomatically == true)
     }
 }
+
+@Suite("Advancing")
+@MainActor
+struct AdvanceTests {
+    @Test("Slide timings and looping are written and read back")
+    func roundTrip() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.setAutoAdvance(2.5, in: &presentation)
+        state.setAdvancesOnClick(false, in: &presentation)
+        state.setLoopsSlideshow(true, in: &presentation)
+        let copy = try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+        #expect(copy.slides[0].autoAdvanceAfter == 2.5)
+        #expect(!copy.slides[0].advancesOnClick)
+        #expect(copy.loopsSlideshow)
+    }
+
+    @Test("A timed slide moves on by itself, and a looping show starts over")
+    func advances() async throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        let layout = try #require(presentation.resources.orderedLayouts.last)
+        state.addSlide(using: layout, in: &presentation)
+        state.setAutoAdvance(0.2, toAll: true, in: &presentation)
+        state.setLoopsSlideshow(true, in: &presentation)
+        let session = PresentationSession()
+        session.start(presentation, title: "Test", fromSlide: 0, owner: UUID())
+        try await Task.sleep(for: .milliseconds(350))
+        #expect(session.position == 1)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(session.position == 0)
+        #expect(session.isPresenting)
+        session.end()
+    }
+}

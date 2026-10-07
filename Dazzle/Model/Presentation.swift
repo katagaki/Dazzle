@@ -23,6 +23,10 @@ struct Presentation: Equatable, Sendable {
     /// Everyone who has commented, in each of PowerPoint's two formats.
     var commentAuthors: [CommentAuthor] = []
     var modernCommentAuthors: [ModernCommentAuthor] = []
+    /// Whether the slideshow starts again from the first slide after the
+    /// last, until stopped.
+    var loopsSlideshow = false
+    var isShowSettingsModified = false
 
     var unsupportedFeatures: UnsupportedFeatureReport { package.unsupportedFeatures }
 
@@ -123,6 +127,11 @@ struct Slide: Identifiable, Equatable, Sendable {
     var notesPart: String?
     /// The slide's comment threads, and the parts they were read from.
     var comments: [SlideComment] = []
+    /// Seconds before the slideshow moves on by itself, if it does.
+    var autoAdvanceAfter: Double?
+    /// Whether a tap or click moves the slideshow on.
+    var advancesOnClick = true
+    var isTransitionModified = false
     var legacyCommentsPart: String?
     var modernCommentsPart: String?
     var areCommentsModified = false

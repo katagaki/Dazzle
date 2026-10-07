@@ -207,6 +207,9 @@ extension EditorState {
         copy.canEditShapes = original.canEditShapes
         copy.isBackgroundModified = original.isBackgroundModified
         copy.hasRemovedShapes = original.hasRemovedShapes
+        copy.autoAdvanceAfter = original.autoAdvanceAfter
+        copy.advancesOnClick = original.advancesOnClick
+        copy.isTransitionModified = original.isTransitionModified
         // Notes and comments belong to one slide; the copy gets its own notes.
         copy.relationships.removeAll {
             $0.type == OOXML.RelationshipType.notesSlide || $0.type == OOXML.RelationshipType.comments
@@ -242,6 +245,9 @@ extension EditorState {
         copy.isBackgroundModified = copy.background != nil
         copy.isHidden = slide.isHidden
         copy.showsMasterShapes = slide.showsMasterShapes
+        copy.autoAdvanceAfter = slide.autoAdvanceAfter
+        copy.advancesOnClick = slide.advancesOnClick
+        copy.isTransitionModified = slide.autoAdvanceAfter != nil || !slide.advancesOnClick
         copy.notes = slide.notes
         copy.areNotesModified = !slide.notes.isEmpty
         copy.isModified = true

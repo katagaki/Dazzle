@@ -106,6 +106,9 @@ enum PPTXReader {
         )
         presentation.commentAuthors = authors
         presentation.modernCommentAuthors = modernAuthors
+        if let properties = part(of: OOXML.RelationshipType.presProps), let root = try? XMLLite.parse(properties) {
+            presentation.loopsSlideshow = root.firstChild(named: "showPr")?.attribute("loop") == "1"
+        }
         presentation.resolveSlideLinks()
         return presentation
     }
@@ -243,6 +246,10 @@ enum PPTXReader {
         var slide = Slide(layoutPath: layoutPath, relationships: relationships, shapes: parser.shapes(in: tree))
         slide.background = Background(element: root.firstChild(named: "cSld")?.firstChild(named: "bg"), image: parser.target(of:))
         slide.isHidden = root.attribute("show") == "0"
+        if let transition = transitions(in: root).first {
+            slide.autoAdvanceAfter = transition.attribute("advTm").flatMap(Double.init).map { $0 / 1_000 }
+            slide.advancesOnClick = transition.attribute("advClick") != "0"
+        }
         slide.showsMasterShapes = root.attribute("showMasterSp") != "0"
         slide.canEditShapes = !parser.hasUncapturableShape
         features.formUnion(parser.features)
@@ -282,6 +289,14 @@ enum PPTXReader {
                 picture.media?.playsAutomatically = true
                 shapes[index].kind = .picture(picture)
             }
+        }
+    }
+
+    /// A slide's `p:transition`, and each version of it PowerPoint writes
+    /// side by side for older readers.
+    static func transitions(in root: XMLElement) -> [XMLElement] {
+        root.children(named: "transition") + root.children(named: "AlternateContent").flatMap { alternative in
+            alternative.children.flatMap { $0.children(named: "transition") }
         }
     }
 

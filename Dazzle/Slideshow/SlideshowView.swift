@@ -80,8 +80,12 @@ private struct AudienceControls: View {
                             return
                         }
                     }
-                    // The left fifth goes back; anywhere else goes on.
-                    if value.location.x < 120 { session.previous() } else { session.next() }
+                    // The left fifth goes back; anywhere else goes on, unless the slide only moves on by itself.
+                    if value.location.x < 120 {
+                        session.previous()
+                    } else if session.advancesOnTap {
+                        session.next()
+                    }
                 }
             )
             .overlay(alignment: .top) {

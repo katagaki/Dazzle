@@ -559,6 +559,15 @@ final class EditorState {
         }
     }
 
+    func setShapeLink(_ link: Hyperlink?, in presentation: inout Presentation) {
+        updateShape(selectedShapeID, edits: [.link], in: &presentation) { $0.link = link }
+    }
+
+    /// Links the selected text, or with none selected, all of the shape's.
+    func setTextLink(_ link: Hyperlink?, in presentation: inout Presentation) {
+        updateRuns(in: &presentation) { $0.link = link }
+    }
+
     func setAltText(_ text: String, in presentation: inout Presentation) {
         updateShape(selectedShapeID, edits: [.altText], in: &presentation) { shape in
             shape.altText = text.nilIfEmpty
@@ -1222,6 +1231,7 @@ extension SlideShape {
         copy.textFrame = shape.textFrame
         copy.isTextBox = shape.isTextBox
         copy.altText = shape.altText
+        copy.link = shape.link
         copy.isLocked = shape.isLocked
         copy.source = shape.source
         copy.edits = shape.edits

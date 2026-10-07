@@ -13,12 +13,14 @@ struct ShapeWriter {
     let namespaces: [String: String]
     /// The slide's relationships, which a new picture adds to.
     var relationships: [Relationship]
+    /// Where each slide is saved, for links to them.
+    var slidePath: (Slide.ID) -> String? = { _ in nil }
 
     mutating func xml(for shape: SlideShape) -> String? {
         if shape.edits.isEmpty, let source = shape.source { return source }
         guard let element = element(for: shape) else { return shape.source }
         let edits: Set<SlideShape.Edit> = shape.source == nil
-            ? [.transform, .fill, .line, .text, .table, .picture, .altText, .effects] : shape.edits
+            ? [.transform, .fill, .line, .text, .table, .picture, .altText, .effects, .link] : shape.edits
         if edits.contains(.transform), shape.hasOwnFrame || shape.source != nil {
             writeTransform(of: shape, into: element)
         }
@@ -39,6 +41,10 @@ struct ShapeWriter {
         }
         if edits.contains(.picture), case .picture(let picture) = shape.kind {
             writePicture(picture, into: element)
+        }
+        if edits.contains(.link), shape.link != .other {
+            let common = element.children.first { $0.name.hasPrefix("nv") }?.firstChild(named: "cNvPr")
+            if let common { writeLink(shape.link, into: common, before: ["hlinkHover", "extLst"], atStart: true) }
         }
         if edits.contains(.altText) {
             let common = element.children.first { $0.name.hasPrefix("nv") }?.firstChild(named: "cNvPr")
@@ -298,7 +304,7 @@ struct ShapeWriter {
         }
     }
 
-    private func writeText(_ text: TextBody, into element: XMLElement) {
+    private mutating func writeText(_ text: TextBody, into element: XMLElement) {
         let body: XMLElement
         if let existing = element.firstChild(named: "txBody") {
             body = existing
@@ -316,6 +322,38 @@ struct ShapeWriter {
             if let element = fragment(paragraphXML(paragraph)) {
                 body.insertChild(element, at: body.children.count)
             }
+        }
+    }
+
+    // MARK: - Links
+
+    /// Replaces an element's `a:hlinkClick` with `link`, or with none.
+    private mutating func writeLink(_ link: Hyperlink?, into element: XMLElement, before names: Set<String>, atStart: Bool = false) {
+        for child in element.children(named: "hlinkClick") { element.removeChild(child) }
+        guard let link, let xml = linkXML(link), let new = fragment(xml) else { return }
+        let before = element.children.firstIndex { names.contains($0.name) }
+        element.insertChild(new, at: before ?? (atStart ? 0 : element.children.count))
+    }
+
+    /// A link's `a:hlinkClick`, with the relationship it needs added.
+    private mutating func linkXML(_ link: Hyperlink) -> String? {
+        switch link {
+        case .url(let address):
+            let id: String
+            if let existing = relationships.first(where: {
+                $0.type == OOXML.RelationshipType.hyperlink && $0.isExternal && $0.target == address
+            }) {
+                id = existing.id
+            } else {
+                id = Relationship.unusedID(in: relationships)
+                relationships.append(Relationship(id: id, type: OOXML.RelationshipType.hyperlink, target: address, isExternal: true))
+            }
+            return link.xml(relationshipID: id)
+        case .slide(let slideID):
+            guard let path = slidePath(slideID) else { return nil }
+            return link.xml(relationshipID: relationshipID(for: path, type: OOXML.RelationshipType.slide))
+        default:
+            return link.xml(relationshipID: nil)
         }
     }
 
@@ -340,7 +378,7 @@ struct ShapeWriter {
 
     /// Writes the table's grid, rows and cells from the model, each cell
     /// starting from the XML it was read with.
-    private func writeTable(_ table: SlideTable, into element: XMLElement) {
+    private mutating func writeTable(_ table: SlideTable, into element: XMLElement) {
         guard let data = element.firstChild(named: "graphic")?.firstChild(named: "graphicData"),
               let grid = data.firstChild(named: "tbl") else { return }
         let properties = table.sourceProperties.flatMap(fragment) ?? grid.firstChild(named: "tblPr") ?? fragment("<a:tblPr/>")
@@ -368,7 +406,7 @@ struct ShapeWriter {
         if let extensions { grid.insertChild(extensions, at: grid.children.count) }
     }
 
-    private func cellElement(_ cell: SlideTable.Cell) -> XMLElement? {
+    private mutating func cellElement(_ cell: SlideTable.Cell) -> XMLElement? {
         guard let element = fragment("<a:tc/>") else { return nil }
         element.setAttribute("gridSpan", cell.columnSpan > 1 ? String(cell.columnSpan) : nil)
         element.setAttribute("rowSpan", cell.rowSpan > 1 ? String(cell.rowSpan) : nil)
@@ -415,7 +453,7 @@ struct ShapeWriter {
 
     // MARK: - Paragraphs
 
-    func paragraphXML(_ paragraph: Paragraph) -> String {
+    mutating func paragraphXML(_ paragraph: Paragraph) -> String {
         var xml = "<a:p>"
         if let properties = paragraphPropertiesXML(paragraph) { xml += properties }
         for run in paragraph.runs {
@@ -502,7 +540,7 @@ struct ShapeWriter {
     }
 
     /// Run properties as the file had them, with what Dazzle models laid over.
-    func runPropertiesXML(_ properties: RunProperties, source: String?, name: String) -> String {
+    mutating func runPropertiesXML(_ properties: RunProperties, source: String?, name: String) -> String {
         var element = source.flatMap(fragment) ?? fragment("<a:\(name) lang=\"en-US\" dirty=\"0\"/>")
         if let existing = element, existing.name != name, let renamed = fragment("<a:\(name)/>") {
             // `endParaRPr` lending its properties to a run, or the other way round.
@@ -534,6 +572,10 @@ struct ShapeWriter {
                 }
                 element.insertChild(latin, at: before ?? element.children.count)
             }
+        }
+        // A link Dazzle does not follow is left as the file had it.
+        if properties.link != .other, name == "rPr" {
+            writeLink(properties.link, into: element, before: ["hlinkMouseOver", "rtl", "extLst"])
         }
         return XMLLite.serialize(element, inheritedNamespaces: fragmentNamespaces) ?? ""
     }

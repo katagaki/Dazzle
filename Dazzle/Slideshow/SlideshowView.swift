@@ -51,9 +51,12 @@ private struct AudienceControls: View {
     var session: PresentationSession
     @State private var showsControls = true
     @State private var hideTask: Task<Void, Never>?
+    @State private var size = CGSize.zero
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         AudienceView(session: session)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
             .contentShape(.rect)
             .gesture(
                 DragGesture(minimumDistance: 30).onEnded { value in
@@ -63,9 +66,16 @@ private struct AudienceControls: View {
             )
             .simultaneousGesture(
                 SpatialTapGesture().onEnded { value in
+                    defer { revealControls() }
+                    // A link on the slide goes where it leads.
+                    if let presentation = session.presentation,
+                       let point = SlideGeometry.slidePoint(value.location, in: size, slideSize: presentation.slideSize.points),
+                       let link = session.link(at: point) {
+                        if let url = session.follow(link) { openURL(url) }
+                        return
+                    }
                     // The left fifth goes back; anywhere else goes on.
                     if value.location.x < 120 { session.previous() } else { session.next() }
-                    revealControls()
                 }
             )
             .overlay(alignment: .top) {
@@ -122,6 +132,8 @@ private struct AudienceControls: View {
 struct PresenterView: View {
     var session: PresentationSession
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.openURL) private var openURL
+    @State private var currentSize = CGSize.zero
 
     var body: some View {
         VStack(spacing: 12) {
@@ -180,6 +192,13 @@ struct PresenterView: View {
         if let presentation = session.presentation, let slide = session.currentSlide {
             SlideView(presentation: presentation, slide: slide)
                 .aspectRatio(presentation.slideSize.aspectRatio, contentMode: .fit)
+                // The presenter can follow the slide's links from here.
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { currentSize = $0 }
+                .onTapGesture { location in
+                    guard let point = SlideGeometry.slidePoint(location, in: currentSize, slideSize: presentation.slideSize.points),
+                          let link = session.link(at: point) else { return }
+                    if let url = session.follow(link) { openURL(url) }
+                }
                 .clipShape(.rect(cornerRadius: 8))
                 .overlay {
                     if session.isBlanked {
@@ -259,3 +278,18 @@ struct PresenterView: View {
         }
     }
 }
+
+/// Turning a point in a view that shows a slide, fitted and centred, into
+/// a point on the slide.
+enum SlideGeometry {
+    static func slidePoint(_ location: CGPoint, in size: CGSize, slideSize: CGSize) -> CGPoint? {
+        guard size.width > 0, size.height > 0, slideSize.width > 0, slideSize.height > 0 else { return nil }
+        let scale = min(size.width / slideSize.width, size.height / slideSize.height)
+        let shown = CGSize(width: slideSize.width * scale, height: slideSize.height * scale)
+        let origin = CGPoint(x: (size.width - shown.width) / 2, y: (size.height - shown.height) / 2)
+        let point = CGPoint(x: (location.x - origin.x) / scale, y: (location.y - origin.y) / scale)
+        guard point.x >= 0, point.y >= 0, point.x <= slideSize.width, point.y <= slideSize.height else { return nil }
+        return point
+    }
+}
+

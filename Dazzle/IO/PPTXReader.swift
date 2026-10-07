@@ -106,6 +106,7 @@ enum PPTXReader {
         )
         presentation.commentAuthors = authors
         presentation.modernCommentAuthors = modernAuthors
+        presentation.resolveSlideLinks()
         return presentation
     }
 

@@ -166,7 +166,8 @@ private struct PackageBuilder {
             throw PresentationWriteError.unwritablePart(path)
         }
         let scope = PPTXReader.namespacesInScope(of: tree)
-        var writer = ShapeWriter(partPath: path, namespaces: scope, relationships: slide.relationships)
+        let paths = Dictionary(slides.compactMap { slide in slide.partName.map { (slide.id, $0) } }) { first, _ in first }
+        var writer = ShapeWriter(partPath: path, namespaces: scope, relationships: slide.relationships) { paths[$0] }
         for child in tree.children where !["nvGrpSpPr", "grpSpPr"].contains(child.name) {
             tree.removeChild(child)
         }
@@ -270,8 +271,8 @@ private struct PackageBuilder {
         let paragraphs = slide.notes.components(separatedBy: "\n").map { line in
             Paragraph(runs: line.isEmpty ? [] : [TextRun(text: line)])
         }
-        let writer = ShapeWriter(partPath: "", namespaces: [:], relationships: [])
-        let paragraphXML = paragraphs.map(writer.paragraphXML).joined()
+        var writer = ShapeWriter(partPath: "", namespaces: [:], relationships: [])
+        let paragraphXML = paragraphs.map { writer.paragraphXML($0) }.joined()
 
         if let notesPath = slide.notesPart, let data = parts[notesPath],
            let root = try? XMLLite.parse(data),

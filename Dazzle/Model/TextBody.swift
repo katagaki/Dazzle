@@ -312,6 +312,8 @@ struct RunProperties: Equatable, Hashable, Sendable {
     var baseline: Int?
     /// `all` or `small` capitals.
     var capitalization: String?
+    /// Where clicking the text goes. Never inherited.
+    var link: Hyperlink?
 
     init() {
         // Every property unsaid: inherited.

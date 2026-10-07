@@ -22,6 +22,8 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
         case altText
         /// Its shadow.
         case effects
+        /// Where clicking it goes.
+        case link
     }
 
     enum Kind: Equatable, Hashable, Sendable {
@@ -93,6 +95,8 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
     var isTextBox = false
     /// `descr`: what the shape shows, for people who cannot see it.
     var altText: String?
+    /// Where clicking the shape goes, in a slideshow.
+    var link: Hyperlink?
     /// Read from XML Dazzle can show but not safely rewrite, such as a shape
     /// offered in two forms for different versions of PowerPoint. It can be
     /// deleted, but not changed.

@@ -116,6 +116,14 @@ struct TextPanel: View {
                 }
                 .accessibilityIdentifier("lineSpacing")
             }
+
+            Section {
+                LinkEditor(link: style.link, presentation: presentation) { state.setTextLink($0, in: &presentation) }
+            } header: {
+                Text("Format.Section.Link")
+            } footer: {
+                Text(state.activeTextRange.map { $0.length > 0 } == true ? "Format.Link.Selection" : "Format.Link.AllText")
+            }
         }
     }
 
@@ -249,6 +257,13 @@ struct FormatPanel: View {
         AlignButtons(presentation: $presentation, state: state)
         GroupButtons(presentation: $presentation, state: state)
         if !state.hasMultipleSelection {
+            Section {
+                LinkEditor(link: shape.link, presentation: presentation) { state.setShapeLink($0, in: &presentation) }
+            } header: {
+                Text("Format.Section.Link")
+            } footer: {
+                Text("Format.Link.Footer")
+            }
             descriptionSection(shape)
         }
         if shape.canRotate, !state.hasMultipleSelection {

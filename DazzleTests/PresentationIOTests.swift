@@ -1136,3 +1136,57 @@ struct ExportTests {
         #expect(abs(duration - 3) < 0.1)
     }
 }
+
+@Suite("Hyperlinks")
+@MainActor
+struct HyperlinkTests {
+    @Test("Links on shapes and on text are written and read back, to the web and to slides")
+    func roundTrip() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        let layout = try #require(presentation.resources.orderedLayouts.last)
+        state.addSlide(using: layout, in: &presentation)
+        let second = presentation.slides[1].id
+        state.selectSlide(presentation.slides[0].id)
+        state.insertShape("rect", in: &presentation)
+        state.setShapeLink(.url("https://example.com"), in: &presentation)
+        state.insertTextBox(in: &presentation)
+        state.setText("Go to the end", in: &presentation)
+        state.endEditingText()
+        state.setTextLink(.slide(second), in: &presentation)
+
+        let copy = try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+        let shapes = copy.slides[0].shapes
+        #expect(shapes[shapes.count - 2].link == .url("https://example.com"))
+        let run = try #require(shapes.last?.text?.paragraphs.first?.runs.first)
+        #expect(run.properties.link == .slide(copy.slides[1].id))
+    }
+
+    @Test("Linked text can be found where it is drawn, and a session follows it")
+    func follow() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        let layout = try #require(presentation.resources.orderedLayouts.last)
+        state.addSlide(using: layout, in: &presentation)
+        state.selectSlide(presentation.slides[0].id)
+        state.insertTextBox(in: &presentation)
+        state.setText("Next", in: &presentation)
+        state.endEditingText()
+        state.setTextLink(.nextSlide, in: &presentation)
+        let box = try #require(presentation.slides[0].shapes.last)
+
+        let areas = SlideRenderer(presentation: presentation, slide: presentation.slides[0]).linkAreas()
+        let area = try #require(areas.first)
+        #expect(area.1 == .nextSlide)
+        #expect(box.frame.points.contains(CGPoint(x: area.0.midX, y: area.0.midY)))
+
+        let session = PresentationSession()
+        session.start(presentation, title: "Test", fromSlide: 0, owner: UUID())
+        let link = try #require(session.link(at: CGPoint(x: area.0.midX, y: area.0.midY)))
+        _ = session.follow(link)
+        #expect(session.position == 1)
+        session.end()
+    }
+}

@@ -47,6 +47,7 @@ final class ShapeParser {
         return tree.children.compactMap { element in
             guard var shape = shape(from: element) else { return nil }
             shape.altText = Self.description(of: element)
+            shape.link = link(in: Self.commonProperties(of: element))
             if capturesSource {
                 if let source = XMLLite.serialize(element, inheritedNamespaces: namespaces) {
                     shape.source = source
@@ -86,12 +87,27 @@ final class ShapeParser {
 
     // MARK: - Shapes
 
-    /// A shape's `descr`, looking inside an alternative's rendition if need be.
-    private static func description(of element: XMLElement) -> String? {
+    /// A shape's `cNvPr`, looking inside an alternative's rendition if need be.
+    private static func commonProperties(of element: XMLElement) -> XMLElement? {
         let shape = element.name == "AlternateContent"
             ? (element.firstChild(named: "Fallback") ?? element.firstChild(named: "Choice"))?.children.first
             : element
-        return shape?.children.first { $0.name.hasPrefix("nv") }?.firstChild(named: "cNvPr")?.attribute("descr")?.nilIfEmpty
+        return shape?.children.first { $0.name.hasPrefix("nv") }?.firstChild(named: "cNvPr")
+    }
+
+    /// A shape's `descr`.
+    private static func description(of element: XMLElement) -> String? {
+        commonProperties(of: element)?.attribute("descr")?.nilIfEmpty
+    }
+
+    /// The link an element's `a:hlinkClick` makes. A link to a slide names
+    /// its part, until the slides have ids.
+    func link(in element: XMLElement?) -> Hyperlink? {
+        let link = Hyperlink(element: element?.firstChild(named: "hlinkClick")) { id in
+            relationships.first { $0.id == id }
+        }
+        if case .slidePart(let target) = link { return .slidePart(PackagePath.resolve(target, from: partPath)) }
+        return link
     }
 
     private func nonVisualProperties(_ element: XMLElement) -> (id: Int, name: String, nv: XMLElement?) {
@@ -421,6 +437,7 @@ final class ShapeParser {
                     run.kind = .field(type: child.attribute("type") ?? "")
                     run.fieldID = child.attribute("id")
                 }
+                run.properties.link = link(in: properties)
                 run.sourceProperties = properties.flatMap(capture)
                 paragraph.runs.append(run)
             case "endParaRPr":

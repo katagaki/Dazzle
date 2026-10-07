@@ -7,13 +7,21 @@ struct TextRenderer {
     let style: SlideStyleContext
     let slideNumber: Int
 
-    /// Draws `body` into `rect`, in a context whose y axis points down.
-    /// `colorOverride` replaces every colour, for placeholder prompts.
-    /// `hidesText` lays the text out but draws only its bullets.
-    func draw(
-        _ body: TextBody, shape: SlideShape, sources: [SlideShape], in rect: CGRect, context: CGContext,
-        colorOverride: RGBAColor? = nil, hidesText: Bool = false
-    ) {
+    /// Text laid out in a shape: the frame CoreText made, and where it sits.
+    private struct Layout {
+        var frame: CTFrame
+        /// The frame's top-left corner, in slide points, in the turned
+        /// space when the text runs vertically.
+        var origin: CGPoint
+        var height: CGFloat
+        /// For vertical text: the point turned about, and by how much.
+        var turn: (center: CGPoint, angle: CGFloat)?
+    }
+
+    private func layout(
+        _ body: TextBody, shape: SlideShape, sources: [SlideShape], in rect: CGRect,
+        colorOverride: RGBAColor?, hidesText: Bool
+    ) -> Layout? {
         let properties = style.bodyProperties(for: shape, sources: sources)
             .merged(over: body.properties)
         var inner = CGRect(
@@ -22,15 +30,12 @@ struct TextRenderer {
             width: rect.width - EMU.points((properties.leftInset ?? 91_440) + (properties.rightInset ?? 91_440)),
             height: rect.height - EMU.points((properties.topInset ?? 45_720) + (properties.bottomInset ?? 45_720))
         )
-        guard inner.width > 0 || properties.wraps == false else { return }
+        guard inner.width > 0 || properties.wraps == false else { return nil }
 
-        context.saveGState()
-        defer { context.restoreGState() }
         // Vertical text is laid out across the shape's height, then turned.
+        var turn: (center: CGPoint, angle: CGFloat)?
         if let vertical = properties.vertical, ["vert", "eaVert", "vert270", "wordArtVert", "mongolianVert"].contains(vertical) {
-            let angle: CGFloat = vertical == "vert270" ? -.pi / 2 : .pi / 2
-            context.translateBy(x: inner.midX, y: inner.midY)
-            context.rotate(by: angle)
+            turn = (CGPoint(x: inner.midX, y: inner.midY), vertical == "vert270" ? -.pi / 2 : .pi / 2)
             inner = CGRect(x: -inner.height / 2, y: -inner.width / 2, width: inner.height, height: inner.width)
         }
 
@@ -82,11 +87,56 @@ struct TextRenderer {
 
         let path = CGPath(rect: CGRect(x: 0, y: 0, width: frameWidth, height: frameHeight), transform: nil)
         let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
-        context.translateBy(x: originX, y: inner.minY + offset + frameHeight)
+        return Layout(frame: frame, origin: CGPoint(x: originX, y: inner.minY + offset), height: frameHeight, turn: turn)
+    }
+
+    /// Draws `body` into `rect`, in a context whose y axis points down.
+    /// `colorOverride` replaces every colour, for placeholder prompts.
+    /// `hidesText` lays the text out but draws only its bullets.
+    func draw(
+        _ body: TextBody, shape: SlideShape, sources: [SlideShape], in rect: CGRect, context: CGContext,
+        colorOverride: RGBAColor? = nil, hidesText: Bool = false
+    ) {
+        guard let layout = layout(body, shape: shape, sources: sources, in: rect, colorOverride: colorOverride, hidesText: hidesText) else {
+            return
+        }
+        context.saveGState()
+        defer { context.restoreGState() }
+        if let turn = layout.turn {
+            context.translateBy(x: turn.center.x, y: turn.center.y)
+            context.rotate(by: turn.angle)
+        }
+        context.translateBy(x: layout.origin.x, y: layout.origin.y + layout.height)
         context.scaleBy(x: 1, y: -1)
         context.textMatrix = .identity
-        CTFrameDraw(frame, context)
-        drawStrikethroughs(in: frame, context: context)
+        CTFrameDraw(layout.frame, context)
+        drawStrikethroughs(in: layout.frame, context: context)
+    }
+
+    /// Where each linked run of `body` lies, in slide points, and where it
+    /// goes. Text running vertically has none.
+    func linkAreas(_ body: TextBody, shape: SlideShape, sources: [SlideShape], in rect: CGRect) -> [(CGRect, Hyperlink)] {
+        guard let layout = layout(body, shape: shape, sources: sources, in: rect, colorOverride: nil, hidesText: false),
+              layout.turn == nil else { return [] }
+        let lines = CTFrameGetLines(layout.frame) as? [CTLine] ?? []
+        var origins = [CGPoint](repeating: .zero, count: lines.count)
+        CTFrameGetLineOrigins(layout.frame, CFRange(location: 0, length: 0), &origins)
+        var areas: [(CGRect, Hyperlink)] = []
+        for (line, origin) in zip(lines, origins) {
+            for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
+                let attributes = CTRunGetAttributes(run) as NSDictionary
+                guard let box = attributes[Self.linkKey.rawValue] as? LinkBox else { continue }
+                var ascent: CGFloat = 0
+                var descent: CGFloat = 0
+                let width = CTRunGetTypographicBounds(run, CFRange(location: 0, length: 0), &ascent, &descent, nil)
+                let start = CTLineGetOffsetForStringIndex(line, CTRunGetStringRange(run).location, nil)
+                areas.append((CGRect(
+                    x: layout.origin.x + origin.x + start, y: layout.origin.y + layout.height - origin.y - ascent,
+                    width: width, height: ascent + descent
+                ), box.link))
+            }
+        }
+        return areas
     }
 
     /// Where a shape's text is laid out, in slide points: the shape's text
@@ -131,6 +181,13 @@ struct TextRenderer {
     private static let underlineKey = NSAttributedString.Key(kCTUnderlineStyleAttributeName as String)
     private static let superscriptKey = NSAttributedString.Key(kCTSuperscriptAttributeName as String)
     private static let strikeKey = NSAttributedString.Key("DazzleStrikethrough")
+    private static let linkKey = NSAttributedString.Key("DazzleLink")
+
+    /// A link riding on the text it belongs to.
+    private final class LinkBox: NSObject {
+        let link: Hyperlink
+        init(_ link: Hyperlink) { self.link = link }
+    }
 
     func attributedString(
         _ body: TextBody, shape: SlideShape, sources: [SlideShape], scale: Double, spacingReduction: Double,
@@ -181,7 +238,12 @@ struct TextRenderer {
             }
 
             for run in paragraph.runs {
-                let runProperties = run.properties.merged(over: properties.defaultRun)
+                var runProperties = run.properties.merged(over: properties.defaultRun)
+                // Linked text is drawn in the theme's link colour, underlined, unless it says otherwise.
+                if run.properties.link != nil {
+                    runProperties.color = run.properties.color ?? .scheme("hlink")
+                    runProperties.isUnderlined = run.properties.isUnderlined ?? true
+                }
                 var text = run.text
                 if case .field(let type) = run.kind {
                     if type == "slidenum" {
@@ -192,9 +254,9 @@ struct TextRenderer {
                 }
                 if runProperties.capitalization == "all" { text = text.uppercased() }
                 text = Self.symbolsMapped(text)
-                result.append(NSAttributedString(
-                    string: text, attributes: attributes(for: runProperties, scale: scale, colorOverride: textColor)
-                ))
+                var runAttributes = attributes(for: runProperties, scale: scale, colorOverride: textColor)
+                if let link = run.properties.link { runAttributes[Self.linkKey] = LinkBox(link) }
+                result.append(NSAttributedString(string: text, attributes: runAttributes))
             }
 
             // A paragraph break, or for the last paragraph a zero-width space

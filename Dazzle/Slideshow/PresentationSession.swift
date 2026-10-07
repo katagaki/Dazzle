@@ -97,6 +97,42 @@ final class PresentationSession {
         publish()
     }
 
+    // MARK: - Links
+
+    /// The link at a point on the current slide, in slide points. A little
+    /// slack round each makes them easier to hit with a finger.
+    func link(at point: CGPoint) -> Hyperlink? {
+        guard let presentation, let slide = currentSlide, !isBlanked else { return nil }
+        return SlideRenderer(presentation: presentation, slide: slide).linkAreas()
+            .first { $0.0.insetBy(dx: -6, dy: -6).contains(point) }?.1
+    }
+
+    /// Follows a link within the show. A web address is handed back for the
+    /// caller to open.
+    func follow(_ link: Hyperlink) -> URL? {
+        guard isPresenting else { return nil }
+        switch link {
+        case .url(let address):
+            return URL(string: address)
+        case .slide(let id):
+            guard let presentation, let index = presentation.index(of: id) else { return nil }
+            if let target = order.firstIndex(of: index) {
+                go(toPosition: target)
+            } else {
+                // A hidden slide shows when a link leads to it.
+                order.insert(index, at: position + 1)
+                go(toPosition: position + 1)
+            }
+        case .nextSlide: next()
+        case .previousSlide: previous()
+        case .firstSlide: go(toPosition: 0)
+        case .lastSlide: go(toPosition: order.count - 1)
+        case .endShow: end()
+        case .slidePart, .other: break
+        }
+        return nil
+    }
+
     func toggleBlank() {
         guard isPresenting else { return }
         isBlanked.toggle()

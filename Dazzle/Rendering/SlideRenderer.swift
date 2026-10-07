@@ -67,6 +67,28 @@ struct SlideRenderer {
         context.restoreGState()
     }
 
+    // MARK: - Links
+
+    /// Every link on the slide and where it can be tapped, in slide points,
+    /// topmost first. A shape's link covers it; a link in its text covers
+    /// that text, and is found before the shape's.
+    func linkAreas() -> [(CGRect, Hyperlink)] {
+        let style = style
+        let renderer = TextRenderer(style: style, slideNumber: slideNumber)
+        var areas: [(CGRect, Hyperlink)] = []
+        for shape in slide.shapes.reversed() where shape.rotation == 0 {
+            let sources = style.sources(for: shape)
+            if let text = shape.text, case .shape = shape.kind {
+                let textFrame = shape.textFrame?.points ?? shape.geometry.presetName.map {
+                    PresetGeometry.textRect($0, adjustments: shape.geometry.adjustments, in: shape.frame.points)
+                } ?? shape.frame.points
+                areas += renderer.linkAreas(text, shape: shape, sources: sources, in: textFrame)
+            }
+            if let link = shape.link { areas.append((shape.frame.points, link)) }
+        }
+        return areas
+    }
+
     // MARK: - Shapes
 
     private func draw(

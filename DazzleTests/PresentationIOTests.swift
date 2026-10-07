@@ -864,3 +864,31 @@ struct FindReplaceTests {
         #expect(copy.slides[0].notes == "Mention 2026 targets.")
     }
 }
+
+@Suite("Slide size")
+struct SlideSizeTests {
+    @Test("Going to 4:3 scales layouts, slides and text to fit, centred")
+    func toStandard() throws {
+        var presentation = Presentation.blank
+        presentation.slides[0].shapes[0].frame = EMURect(x: 0, y: 0, width: 12_192_000, height: 1_000_000)
+        presentation.slides[0].shapes[0].hasOwnFrame = true
+        presentation.slides[0].shapes[0].edits.insert(.transform)
+        presentation.slides[0].isModified = true
+        let converted = try SlideSizeConverter.convert(presentation, to: .standard, scaling: .ensureFit)
+        #expect(converted.slideSize == SlideSizeConverter.Preset.standard.size)
+        let factor = 9_144_000.0 / 12_192_000.0
+        let title = converted.slides[0].shapes[0]
+        #expect(title.frame.width == 9_144_000)
+        #expect(title.frame.x == 0)
+        #expect(abs(Double(title.frame.y) - (6_858_000 - 6_858_000 * factor) / 2) < 2)
+
+        // The subtitle has no frame of its own; it follows its scaled layout.
+        let layout = try #require(converted.layout(for: converted.slides[0]))
+        let subtitle = converted.slides[0].shapes[1]
+        #expect(subtitle.frame == layout.shapes.first { $0.placeholder?.type == "subTitle" }?.frame)
+
+        let style = SlideStyleContext(presentation: converted, slide: converted.slides[0])
+        let size = style.paragraphBase(for: title, sources: style.sources(for: title), level: 0).defaultRun.size
+        #expect(size == Int((6_000 * factor).rounded()))
+    }
+}

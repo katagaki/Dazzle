@@ -191,6 +191,8 @@ struct FormatPanel: View {
     @Bindable var state: EditorState
 
     @State private var replacement: PhotosPickerItem?
+    /// A slide size picked, waiting on how to scale to it.
+    @State private var pendingSize: SlideSizeConverter.Preset?
 
     private var slide: Slide? { state.selectedSlide(in: presentation) }
     private var shape: SlideShape? { state.selectedShape(in: presentation) }
@@ -473,6 +475,36 @@ struct FormatPanel: View {
                 Text("Format.Background.Footer")
             }
 
+            Section("Format.Section.Presentation") {
+                Picker("Format.SlideSize", selection: Binding(
+                    get: { SlideSizeConverter.Preset.matching(presentation.slideSize) },
+                    set: { pendingSize = $0 }
+                )) {
+                    ForEach(SlideSizeConverter.Preset.allCases) { preset in
+                        Text(preset.label).tag(Optional(preset))
+                    }
+                    if SlideSizeConverter.Preset.matching(presentation.slideSize) == nil {
+                        Text("SlideSize.Custom").tag(SlideSizeConverter.Preset?.none)
+                    }
+                }
+                .accessibilityIdentifier("slideSize")
+                .confirmationDialog(
+                    "SlideSize.Scaling.Title", isPresented: Binding(get: { pendingSize != nil }, set: { if !$0 { pendingSize = nil } }),
+                    titleVisibility: .visible
+                ) {
+                    Button("SlideSize.Scaling.EnsureFit") {
+                        if let pendingSize { state.setSlideSize(pendingSize, scaling: .ensureFit, in: &presentation) }
+                        pendingSize = nil
+                    }
+                    Button("SlideSize.Scaling.Maximize") {
+                        if let pendingSize { state.setSlideSize(pendingSize, scaling: .maximize, in: &presentation) }
+                        pendingSize = nil
+                    }
+                } message: {
+                    Text("SlideSize.Scaling.Message")
+                }
+            }
+
             Section("Format.Section.Slide") {
                 LabeledContent("Format.Slide.Layout", value: presentation.layout(for: slide)?.name ?? "")
                 Toggle("Format.Slide.Hidden", isOn: Binding(
@@ -665,5 +697,16 @@ struct StyleToggle: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+extension SlideSizeConverter.Preset {
+    var label: LocalizedStringKey {
+        switch self {
+        case .widescreen: "SlideSize.Widescreen"
+        case .standard: "SlideSize.Standard"
+        case .widescreen16x10: "SlideSize.Widescreen16x10"
+        case .a4: "SlideSize.A4"
+        }
     }
 }

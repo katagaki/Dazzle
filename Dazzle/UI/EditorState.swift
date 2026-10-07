@@ -198,6 +198,22 @@ final class EditorState {
         presentation.slides[index].areNotesModified = true
     }
 
+    /// Changes the slide size, scaling everything on the slides, layouts
+    /// and masters to suit.
+    func setSlideSize(
+        _ preset: SlideSizeConverter.Preset, scaling: SlideSizeConverter.Scaling, in presentation: inout Presentation
+    ) {
+        let index = selectedIndex(in: presentation)
+        do {
+            let converted = try SlideSizeConverter.convert(presentation, to: preset, scaling: scaling)
+            presentation = converted
+            selectedSlideID = nil
+            selectSlide(converted.slides[min(index, converted.slides.count - 1)].id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func setBackground(_ fill: Fill?, in presentation: inout Presentation) {
         let index = selectedIndex(in: presentation)
         guard presentation.slides.indices.contains(index) else { return }

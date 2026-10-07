@@ -3,7 +3,7 @@
     A slide on the screen: a pie chart with one slice pulled out of it, and
     lines of text set beside it. Drawn solid white so it holds up in dark
     mode, where see-through shapes would fade into the screen behind them.
-    The text lines share Libretto's weight, and the bezel's.
+    The text lines share Libretto's weight.
   -->
   <g fill="#FFFFFF">
     <path d="M364 512L364 396A116 116 0 1 1 248 512Z"/>

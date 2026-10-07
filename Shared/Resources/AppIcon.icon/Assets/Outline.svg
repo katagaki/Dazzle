@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!--
-    The monitor's bezel, as its own layer on top so it catches the light
-    apart from the screen beneath: the screen's outline less an inset of it.
-  -->
-  <path fill="#FFFFFF" fill-rule="evenodd" d="M220 288H804A48 48 0 0 1 852 336V688A48 48 0 0 1 804 736H220A48 48 0 0 1 172 688V336A48 48 0 0 1 220 288ZM220 316H804A20 20 0 0 1 824 336V688A20 20 0 0 1 804 708H220A20 20 0 0 1 200 688V336A20 20 0 0 1 220 316Z"/>
-</svg>

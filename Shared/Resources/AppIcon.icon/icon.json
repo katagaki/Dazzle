@@ -17,42 +17,6 @@
           ],
           "glass" : true,
           "hidden" : false,
-          "image-name" : "Outline.svg",
-          "name" : "Outline",
-          "opacity" : 0.5,
-          "position-specializations" : [
-            {
-              "value" : {
-                "scale" : 1,
-                "translation-in-points" : [
-                  0,
-                  0
-                ]
-              }
-            },
-            {
-              "idiom" : "square",
-              "value" : {
-                "scale" : 1.15,
-                "translation-in-points" : [
-                  0,
-                  0
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "fill-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : {
-                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
-              }
-            }
-          ],
-          "glass" : true,
-          "hidden" : false,
           "image-name" : "Chart.svg",
           "name" : "Chart",
           "position-specializations" : [

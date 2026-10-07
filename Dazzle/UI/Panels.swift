@@ -363,8 +363,44 @@ struct FormatPanel: View {
                 }
                 .fixedSize()
             }
+            Picker("Format.Outline.Dash", selection: Binding(
+                get: { shape.line?.dash ?? "solid" },
+                set: { dash in state.setLine({ $0.dash = dash }, in: &presentation) }
+            )) {
+                ForEach(Self.dashes, id: \.0) { value, label in
+                    Text(label).tag(value)
+                }
+            }
+            .accessibilityIdentifier("lineDash")
+            // Arrowheads only show on lines that have ends.
+            if shape.kind == .connector || PresetGeometry.isOpen(shape.geometry.presetName ?? "") {
+                Picker("Format.Outline.Start", selection: Binding(
+                    get: { shape.line?.head ?? "none" },
+                    set: { head in state.setLine({ $0.head = head == "none" ? nil : head }, in: &presentation) }
+                )) {
+                    ForEach(Self.lineEnds, id: \.0) { value, label in Text(label).tag(value) }
+                }
+                .accessibilityIdentifier("lineStart")
+                Picker("Format.Outline.End", selection: Binding(
+                    get: { shape.line?.tail ?? "none" },
+                    set: { tail in state.setLine({ $0.tail = tail == "none" ? nil : tail }, in: &presentation) }
+                )) {
+                    ForEach(Self.lineEnds, id: \.0) { value, label in Text(label).tag(value) }
+                }
+                .accessibilityIdentifier("lineEnd")
+            }
         }
     }
+
+    private static let dashes: [(String, LocalizedStringKey)] = [
+        ("solid", "Line.Solid"), ("sysDash", "Line.Dash"), ("sysDot", "Line.Dot"),
+        ("dashDot", "Line.DashDot"), ("lgDash", "Line.LongDash"),
+    ]
+
+    private static let lineEnds: [(String, LocalizedStringKey)] = [
+        ("none", "Line.End.None"), ("triangle", "Line.End.Triangle"), ("arrow", "Line.End.Arrow"),
+        ("stealth", "Line.End.Stealth"), ("oval", "Line.End.Oval"), ("diamond", "Line.End.Diamond"),
+    ]
 
     @ViewBuilder
     private var slideSections: some View {

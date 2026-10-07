@@ -234,26 +234,43 @@ struct ShapeWriter {
         properties.insertChild(new, at: (after ?? -1) + 1)
     }
 
+    /// Writes the outline's fill, width, dash and arrowheads over what the
+    /// file had, keeping its caps, joins and anything else.
     private func writeLine(_ line: LineStyle, into element: XMLElement) {
         guard let properties = properties(of: element) else { return }
-        let existing = properties.firstChild(named: "ln")
-        let fillXML = line.fill?.xml ?? ""
-        let width = line.width.map { " w=\"\($0)\"" } ?? ""
-        guard let new = fragment("<a:ln\(width)>\(fillXML)</a:ln>") else { return }
-        if let existing {
-            // Keep the dash, joins and arrowheads the file gave it.
-            for child in existing.children where !Fill.elementNames.contains(child.name) {
-                new.insertChild(child, at: new.children.count)
-            }
-            for (key, value) in existing.attributes where key != "w" {
-                new.setAttribute(key, value)
-            }
-            properties.replaceChild(existing, with: new)
+        let outline: XMLElement
+        if let existing = properties.firstChild(named: "ln") {
+            outline = existing
         } else {
+            guard let created = fragment("<a:ln/>") else { return }
             let after = properties.children.lastIndex {
                 ["xfrm", "prstGeom", "custGeom"].contains($0.name) || Fill.elementNames.contains($0.name)
             }
-            properties.insertChild(new, at: (after ?? -1) + 1)
+            properties.insertChild(created, at: (after ?? -1) + 1)
+            outline = created
+        }
+        if let width = line.width { outline.setAttribute("w", String(width)) }
+        func place(_ xml: String?, replacing names: Set<String>) {
+            for child in outline.children where names.contains(child.name) { outline.removeChild(child) }
+            guard let xml, let new = fragment(xml) else { return }
+            let before = outline.children.firstIndex { Self.lineChildOrder(of: $0.name) > Self.lineChildOrder(of: new.name) }
+            outline.insertChild(new, at: before ?? outline.children.count)
+        }
+        if let fill = line.fill { place(fill.xml, replacing: Fill.elementNames) }
+        if let dash = line.dash { place("<a:prstDash val=\"\(XMLLite.escape(dash))\"/>", replacing: ["prstDash", "custDash"]) }
+        place(line.head.map { "<a:headEnd type=\"\(XMLLite.escape($0))\"/>" }, replacing: ["headEnd"])
+        place(line.tail.map { "<a:tailEnd type=\"\(XMLLite.escape($0))\"/>" }, replacing: ["tailEnd"])
+    }
+
+    /// Where a child of `a:ln` goes among its siblings.
+    private static func lineChildOrder(of name: String) -> Int {
+        switch name {
+        case "noFill", "solidFill", "gradFill", "pattFill": 0
+        case "prstDash", "custDash": 1
+        case "round", "bevel", "miter": 2
+        case "headEnd": 3
+        case "tailEnd": 4
+        default: 5
         }
     }
 

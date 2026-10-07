@@ -295,9 +295,12 @@ struct SlideRenderer {
         context.setLineWidth(width)
         context.setLineJoin(.round)
         switch line.dash {
-        case "dash", "lgDash", "sysDash": context.setLineDash(phase: 0, lengths: [width * 4, width * 3])
+        case "dash", "sysDash": context.setLineDash(phase: 0, lengths: [width * 4, width * 3])
+        case "lgDash": context.setLineDash(phase: 0, lengths: [width * 8, width * 3])
         case "dot", "sysDot": context.setLineDash(phase: 0, lengths: [width, width * 2])
-        case "dashDot", "lgDashDot", "sysDashDot": context.setLineDash(phase: 0, lengths: [width * 4, width * 2, width, width * 2])
+        case "dashDot", "sysDashDot": context.setLineDash(phase: 0, lengths: [width * 4, width * 2, width, width * 2])
+        case "lgDashDot", "lgDashDotDot", "sysDashDotDot":
+            context.setLineDash(phase: 0, lengths: [width * 8, width * 3, width, width * 3])
         default: break
         }
         context.addPath(path)
@@ -310,8 +313,10 @@ struct SlideRenderer {
         guard let points else { return }
         context.saveGState()
         context.setFillColor(resolved.cgColor)
-        if line.tail != nil { arrowhead(at: points.end, from: points.beforeEnd, width: width, context: context) }
-        if line.head != nil { arrowhead(at: points.start, from: points.afterStart, width: width, context: context) }
+        context.setStrokeColor(resolved.cgColor)
+        context.setLineWidth(width)
+        if let tail = line.tail { arrowhead(tail, at: points.end, from: points.beforeEnd, width: width, context: context) }
+        if let head = line.head { arrowhead(head, at: points.start, from: points.afterStart, width: width, context: context) }
         context.restoreGState()
     }
 
@@ -330,15 +335,45 @@ struct SlideRenderer {
         return (points[0], points[1], points[points.count - 2], points[points.count - 1])
     }
 
-    private func arrowhead(at tip: CGPoint, from tail: CGPoint, width: CGFloat, context: CGContext) {
+    /// A line end of `type`: `triangle`, `stealth`, `arrow` (open), `oval` or `diamond`.
+    private func arrowhead(_ type: String, at tip: CGPoint, from tail: CGPoint, width: CGFloat, context: CGContext) {
         let angle = atan2(tip.y - tail.y, tip.x - tail.x)
         let length = max(width * 4, 6)
         let spread: CGFloat = .pi / 7
-        context.move(to: tip)
-        context.addLine(to: CGPoint(x: tip.x - length * cos(angle - spread), y: tip.y - length * sin(angle - spread)))
-        context.addLine(to: CGPoint(x: tip.x - length * cos(angle + spread), y: tip.y - length * sin(angle + spread)))
-        context.closePath()
-        context.fillPath()
+        func point(_ distance: CGFloat, _ turn: CGFloat) -> CGPoint {
+            CGPoint(x: tip.x - distance * cos(angle + turn), y: tip.y - distance * sin(angle + turn))
+        }
+        switch type {
+        case "oval":
+            let radius = length / 2.5
+            context.fillEllipse(in: CGRect(x: tip.x - radius, y: tip.y - radius, width: radius * 2, height: radius * 2))
+        case "diamond":
+            let half = length / 2.5
+            context.move(to: CGPoint(x: tip.x + half * cos(angle), y: tip.y + half * sin(angle)))
+            context.addLine(to: CGPoint(x: tip.x - half * sin(angle), y: tip.y + half * cos(angle)))
+            context.addLine(to: CGPoint(x: tip.x - half * cos(angle), y: tip.y - half * sin(angle)))
+            context.addLine(to: CGPoint(x: tip.x + half * sin(angle), y: tip.y - half * cos(angle)))
+            context.closePath()
+            context.fillPath()
+        case "arrow":
+            context.move(to: point(length, -spread))
+            context.addLine(to: tip)
+            context.addLine(to: point(length, spread))
+            context.strokePath()
+        case "stealth":
+            context.move(to: tip)
+            context.addLine(to: point(length, -spread))
+            context.addLine(to: point(length * 0.6, 0))
+            context.addLine(to: point(length, spread))
+            context.closePath()
+            context.fillPath()
+        default:
+            context.move(to: tip)
+            context.addLine(to: point(length, -spread))
+            context.addLine(to: point(length, spread))
+            context.closePath()
+            context.fillPath()
+        }
     }
 
     // MARK: - Pictures

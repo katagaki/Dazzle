@@ -765,3 +765,24 @@ struct FillTests {
         #expect(final.data(at: backgroundPath) == png)
     }
 }
+
+@Suite("Outlines")
+@MainActor
+struct OutlineTests {
+    @Test("Dashes and arrowheads are written where the schema wants them")
+    func dashAndArrows() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.insertShape("line", in: &presentation)
+        state.setLine({ $0.dash = "sysDot"; $0.tail = "triangle"; $0.head = "oval" }, in: &presentation)
+        let copy = try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+        let line = try #require(copy.slides[0].shapes.last?.line)
+        #expect(line.dash == "sysDot")
+        #expect(line.head == "oval")
+        #expect(line.tail == "triangle")
+        let source = try #require(copy.slides[0].shapes.last?.source)
+        let order = ["solidFill", "prstDash", "headEnd", "tailEnd"].compactMap { source.range(of: $0)?.lowerBound }
+        #expect(order == order.sorted() && order.count == 4)
+    }
+}

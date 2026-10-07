@@ -232,6 +232,10 @@ struct FormatPanel: View {
         } else if shape.isPicture {
             outlineSection(shape)
         }
+        switch shape.kind {
+        case .shape, .connector, .picture: shadowSection(shape)
+        default: EmptyView()
+        }
         Section("Format.Section.Arrange") {
             Button("Arrange.Front", systemImage: "square.3.layers.3d.top.filled") {
                 state.arrangeSelectedShape(.front, in: &presentation)
@@ -391,6 +395,49 @@ struct FormatPanel: View {
             }
         }
     }
+
+    private func shadowSection(_ shape: SlideShape) -> some View {
+        Section("Format.Section.Shadow") {
+            Picker("Format.Shadow", selection: Binding(
+                get: { Self.shadows.first { $0.shadow == shape.shadow }?.id ?? (shape.shadow == nil ? "none" : "custom") },
+                set: { id in
+                    guard let choice = Self.shadows.first(where: { $0.id == id }) else { return }
+                    state.setShadow(choice.shadow, in: &presentation)
+                }
+            )) {
+                ForEach(Self.shadows, id: \.id) { choice in
+                    Text(choice.label).tag(choice.id)
+                }
+                if shape.shadow != nil, !Self.shadows.contains(where: { $0.shadow == shape.shadow }) {
+                    Text("Shadow.Custom").tag("custom")
+                }
+            }
+            .accessibilityIdentifier("shadow")
+        }
+    }
+
+    private struct ShadowChoice {
+        let id: String
+        let label: LocalizedStringKey
+        let shadow: Shadow?
+    }
+
+    /// PowerPoint's most used outer shadows.
+    private static let shadows = [
+        ShadowChoice(id: "none", label: "Shadow.None", shadow: nil),
+        ShadowChoice(id: "drop", label: "Shadow.Drop", shadow: Shadow(
+            blur: 50_800, distance: 38_100, direction: 45, color: Shadow.black(opacity: 0.4)
+        )),
+        ShadowChoice(id: "soft", label: "Shadow.Soft", shadow: Shadow(
+            blur: 152_400, distance: 50_800, direction: 90, color: Shadow.black(opacity: 0.35)
+        )),
+        ShadowChoice(id: "close", label: "Shadow.Close", shadow: Shadow(
+            blur: 25_400, distance: 19_050, direction: 45, color: Shadow.black(opacity: 0.6)
+        )),
+        ShadowChoice(id: "below", label: "Shadow.Below", shadow: Shadow(
+            blur: 76_200, distance: 76_200, direction: 90, color: Shadow.black(opacity: 0.3)
+        )),
+    ]
 
     private static let dashes: [(String, LocalizedStringKey)] = [
         ("solid", "Line.Solid"), ("sysDash", "Line.Dash"), ("sysDot", "Line.Dot"),

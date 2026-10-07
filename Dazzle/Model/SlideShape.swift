@@ -20,6 +20,8 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
         case picture
         /// The description read out in place of the shape.
         case altText
+        /// Its shadow.
+        case effects
     }
 
     enum Kind: Equatable, Hashable, Sendable {
@@ -81,6 +83,8 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
     var geometry: ShapeGeometry = .preset("rect", adjustments: [:])
     var fill: Fill?
     var line: LineStyle?
+    /// A shadow the shape's own properties cast.
+    var shadow: Shadow?
     var style: StyleReferences?
     var text: TextBody?
     /// For SmartArt shapes, where the text goes when it is not the whole shape.

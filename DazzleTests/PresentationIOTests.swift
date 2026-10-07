@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import SwiftUI
 import Testing
 @testable import Dazzle
 
@@ -784,5 +785,52 @@ struct OutlineTests {
         let source = try #require(copy.slides[0].shapes.last?.source)
         let order = ["solidFill", "prstDash", "headEnd", "tailEnd"].compactMap { source.range(of: $0)?.lowerBound }
         #expect(order == order.sorted() && order.count == 4)
+    }
+}
+
+@Suite("Shadows")
+@MainActor
+struct ShadowTests {
+    @Test("Shadows are written, read back, and fall the way they point")
+    func shadow() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.insertShape("rect", in: &presentation)
+        let id = try #require(state.selectedShapeID)
+        state.setFrame(CGRect(x: 400, y: 200, width: 100, height: 100), of: id, in: &presentation)
+        state.setFill(.solid(.rgb(0xFFFFFF)), in: &presentation)
+        state.setLine({ $0.fill = Fill.none }, in: &presentation)
+        let shadow = Shadow(blur: 0, distance: 254_000, direction: 90, color: .rgb(0x000000))
+        state.setShadow(shadow, in: &presentation)
+        let copy = try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+        #expect(copy.slides[0].shapes.last?.shadow == shadow)
+
+        // A 20pt shadow straight down: dark just below the shape, not above it.
+        var slide = copy.slides[0]
+        slide.shapes = [try #require(slide.shapes.last)]
+        let image = try #require(SlideExporter.cgImage(of: slide, in: copy, width: 960))
+        let data = try #require(image.dataProvider?.data as Data?)
+        func brightness(x: Int, y: Int) -> Int {
+            let offset = y * image.bytesPerRow + x * 4
+            return Int(data[offset])
+        }
+        #expect(brightness(x: 450, y: 310) < 100)
+        #expect(brightness(x: 450, y: 190) > 200)
+
+        // Drawn by SwiftUI, as on screen, it falls the same way.
+        let renderer = ImageRenderer(content: SlideView(presentation: copy, slide: slide).frame(width: 960, height: 540))
+        renderer.scale = 1
+        let screen = try #require(renderer.cgImage)
+        let context = try #require(CGContext(
+            data: nil, width: screen.width, height: screen.height, bitsPerComponent: 8, bytesPerRow: screen.width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(screen, in: CGRect(x: 0, y: 0, width: screen.width, height: screen.height))
+        let pixels = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        // Rows run from the top in the context's memory.
+        func screenBrightness(x: Int, y: Int) -> Int { Int(pixels[(y * screen.width + x) * 4]) }
+        #expect(screenBrightness(x: 450, y: 310) < 100)
+        #expect(screenBrightness(x: 450, y: 190) > 200)
     }
 }

@@ -206,3 +206,40 @@ enum Background: Equatable, Hashable, Sendable {
         }
     }
 }
+
+/// `a:outerShdw`: a shadow cast behind a shape.
+struct Shadow: Equatable, Hashable, Sendable {
+    /// EMU.
+    var blur: Int
+    /// EMU, from the shape to the shadow.
+    var distance: Int
+    /// Degrees clockwise from pointing right, the way the shadow falls.
+    var direction: Double
+    var color: DrawingColor
+
+    init(blur: Int, distance: Int, direction: Double, color: DrawingColor) {
+        self.blur = blur
+        self.distance = distance
+        self.direction = direction
+        self.color = color
+    }
+
+    init?(element: XMLElement?) {
+        guard let element, let color = DrawingColor.first(in: element) else { return nil }
+        blur = element.attribute("blurRad").flatMap(Int.init) ?? 0
+        distance = element.attribute("dist").flatMap(Int.init) ?? 0
+        direction = Double(element.attribute("dir").flatMap(Int.init) ?? 0) / 60_000
+        self.color = color
+    }
+
+    var xml: String {
+        "<a:outerShdw blurRad=\"\(blur)\" dist=\"\(distance)\" dir=\"\(Int((direction * 60_000).rounded()))\" "
+            + "algn=\"ctr\" rotWithShape=\"0\">\(color.xml)</a:outerShdw>"
+    }
+
+    /// Black at a given opacity.
+    static func black(opacity: Double) -> DrawingColor {
+        DrawingColor(base: .rgb(0x000000), transforms: [.init(name: "alpha", value: Int(opacity * 100_000))])
+    }
+}
+

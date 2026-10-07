@@ -18,7 +18,7 @@ struct ShapeWriter {
         if shape.edits.isEmpty, let source = shape.source { return source }
         guard let element = element(for: shape) else { return shape.source }
         let edits: Set<SlideShape.Edit> = shape.source == nil
-            ? [.transform, .fill, .line, .text, .table, .picture, .altText] : shape.edits
+            ? [.transform, .fill, .line, .text, .table, .picture, .altText, .effects] : shape.edits
         if edits.contains(.transform), shape.hasOwnFrame || shape.source != nil {
             writeTransform(of: shape, into: element)
         }
@@ -33,6 +33,9 @@ struct ShapeWriter {
         }
         if edits.contains(.table), case .table(let table) = shape.kind {
             writeTable(table, into: element)
+        }
+        if edits.contains(.effects), shape.source != nil || shape.shadow != nil {
+            writeShadow(shape.shadow, into: element)
         }
         if edits.contains(.picture), case .picture(let picture) = shape.kind {
             writePicture(picture, into: element)
@@ -232,6 +235,16 @@ struct ShapeWriter {
         }
         let after = properties.children.lastIndex { ["xfrm", "prstGeom", "custGeom"].contains($0.name) }
         properties.insertChild(new, at: (after ?? -1) + 1)
+    }
+
+    /// Replaces the shape's effects with its shadow, or with none at all,
+    /// which outranks any its style would give it.
+    private func writeShadow(_ shadow: Shadow?, into element: XMLElement) {
+        guard let properties = properties(of: element) else { return }
+        for child in properties.children where ["effectLst", "effectDag"].contains(child.name) { properties.removeChild(child) }
+        guard let effects = fragment("<a:effectLst>\(shadow?.xml ?? "")</a:effectLst>") else { return }
+        let before = properties.children.firstIndex { ["scene3d", "sp3d", "extLst"].contains($0.name) }
+        properties.insertChild(effects, at: before ?? properties.children.count)
     }
 
     /// Writes the outline's fill, width, dash and arrowheads over what the

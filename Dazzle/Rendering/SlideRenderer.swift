@@ -83,6 +83,20 @@ struct SlideRenderer {
             context.translateBy(x: -frame.midX, y: -frame.midY)
         }
 
+        // A shadow falls from everything the shape draws, taken as one.
+        if let shadow = shape.shadow {
+            let radians = shadow.direction * .pi / 180
+            let distance = EMU.points(shadow.distance)
+            // Shadow offsets and blur are in device space, untouched by the
+            // context's scaling and flipping; carry them across by hand.
+            let offset = CGSize(width: cos(radians) * distance, height: sin(radians) * distance)
+                .applying(CGAffineTransform(a: context.ctm.a, b: context.ctm.b, c: context.ctm.c, d: context.ctm.d, tx: 0, ty: 0))
+            let scale = hypot(context.ctm.a, context.ctm.b)
+            context.setShadow(offset: offset, blur: EMU.points(shadow.blur) * scale, color: style.color(shadow.color).cgColor)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+        }
+        defer { if shape.shadow != nil { context.endTransparencyLayer() } }
+
         switch shape.kind {
         case .group(let group):
             // Children are placed in slide space rather than by scaling the

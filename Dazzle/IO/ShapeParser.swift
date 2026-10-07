@@ -111,6 +111,7 @@ final class ShapeParser {
         shape.geometry = geometry(in: properties)
         shape.fill = Fill.parse(in: properties, image: target(of:))
         shape.line = properties?.firstChild(named: "ln").map(LineStyle.init(element:))
+        shape.shadow = Shadow(element: properties?.firstChild(named: "effectLst")?.firstChild(named: "outerShdw"))
         shape.style = StyleReferences(element: element.firstChild(named: "style"))
         shape.text = element.firstChild(named: "txBody").map(textBody)
         if let textTransform = element.firstChild(named: "txXfrm") {
@@ -148,6 +149,7 @@ final class ShapeParser {
         applyTransform(properties?.firstChild(named: "xfrm"), to: &shape)
         shape.geometry = geometry(in: properties)
         shape.line = properties?.firstChild(named: "ln").map(LineStyle.init(element:))
+        shape.shadow = Shadow(element: properties?.firstChild(named: "effectLst")?.firstChild(named: "outerShdw"))
         inheritFrame(&shape)
         return shape
     }

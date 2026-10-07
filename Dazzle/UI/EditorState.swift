@@ -928,6 +928,15 @@ final class EditorState {
         }
     }
 
+    func setShadow(_ shadow: Shadow?, in presentation: inout Presentation) {
+        updateSelectedShapes(edits: [.effects], in: &presentation) { shape in
+            switch shape.kind {
+            case .shape, .connector, .picture: shape.shadow = shadow
+            default: break
+            }
+        }
+    }
+
     /// Fills the selected shapes with a picture, added to the package.
     func setFillPicture(_ media: PreparedMedia, tiled: Bool, in presentation: inout Presentation) {
         let path = addMedia(media, to: &presentation)
@@ -1042,6 +1051,7 @@ extension SlideShape {
         copy.geometry = shape.geometry
         copy.fill = shape.fill
         copy.line = shape.line
+        copy.shadow = shape.shadow
         copy.style = shape.style
         copy.text = shape.text
         copy.textFrame = shape.textFrame

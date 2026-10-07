@@ -26,20 +26,9 @@ struct SlideNavigator: View {
                     .animation(.snappy(duration: 0.22), value: presentation.slides.map(\.id))
             }
             .scrollIndicators(.hidden)
-            // Thumbnails fade and blur away beneath the strip's buttons.
-            .mask {
-                if axis == .horizontal {
-                    HStack(spacing: 0) {
-                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: Self.edgeFade)
-                        Color.black
-                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: Self.edgeFade)
-                    }
-                } else {
-                    Color.black
-                }
-            }
+            // Blurred thumbnails show through beneath the strip's buttons
+            // rather than being cut off at its bounds.
+            .scrollClipDisabled(axis == .horizontal)
             .onChange(of: state.selectedSlideID) { _, id in
                 guard let id else { return }
                 withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }

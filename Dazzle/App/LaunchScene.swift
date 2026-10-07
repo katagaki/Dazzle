@@ -33,12 +33,16 @@ private enum LaunchPalette {
 
 /// Slides laid like brickwork behind the button, every other row lined up
 /// with its edges, fading out towards the browser. Held back so the button
-/// stays easy to read.
+/// stays easy to read. The slides come in once, row by row from either side,
+/// and then hold still.
 private struct LaunchSlideWall: View {
     var frame: CGRect
     var titleFrame: CGRect
 
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// Whether the slides have come in. Slides laid out after that, as when
+    /// the device turns, are simply there.
+    @State private var isRevealed = false
 
     /// How far in from its frame the system sets the title and button.
     private static let contentInset: CGFloat = 20
@@ -67,8 +71,9 @@ private struct LaunchSlideWall: View {
         // narrowed a little so they fill the title's width exactly.
         let columns = max(1, Int(((content.width + gap) / (120 * scale + gap)).rounded()))
         let width = (content.width - CGFloat(columns - 1) * gap) / CGFloat(columns)
+        let slots = slots(content: content, columns: columns, slideWidth: width, gap: gap, scale: scale)
         ZStack {
-            ForEach(slots(content: content, columns: columns, slideWidth: width, gap: gap, scale: scale)) { slot in
+            ForEach(slots) { slot in
                 LaunchSlideCard(
                     // Stepped by row as well as column, so neither a row nor a
                     // column repeats however many columns there are.
@@ -77,13 +82,26 @@ private struct LaunchSlideWall: View {
                     width: width
                 )
                 .opacity(1 - 0.7 * slot.depth)
+                .modifier(entrance(for: slot))
                 .position(slot.center)
             }
         }
         // Flattened first, so overlapping shadows fade as one.
         .compositingGroup()
         .opacity(0.45)
-        .modifier(LaunchFloating())
+        // The system lays the wall out more than once while the browser loads
+        // and fades it in after, so the slides wait until it can be seen.
+        .background(LaunchVisibilityWatcher { isRevealed = true })
+    }
+
+    /// Even rows ease in a little way from the leading edge and odd rows from
+    /// the trailing one, each row as one, a row at a time from the top.
+    private func entrance(for slot: Slot) -> LaunchEntrance {
+        LaunchEntrance(
+            isShown: isRevealed,
+            delay: 0.12 * Double(slot.row),
+            distance: (slot.row.isMultiple(of: 2) ? -1 : 1) * 40
+        )
     }
 
     private func slots(content: CGRect, columns: Int, slideWidth: CGFloat, gap: CGFloat, scale: CGFloat) -> [Slot] {
@@ -120,17 +138,67 @@ private struct LaunchSlideWall: View {
     }
 }
 
-/// A gentle bob for the whole wall, so it floats without falling out of
-/// line. Held still when Reduce Motion is on.
-private struct LaunchFloating: ViewModifier {
+/// Eases a slide in from the side by the given distance as it fades in, once
+/// it is to be shown, after the given delay. Only fades when Reduce Motion is on.
+private struct LaunchEntrance: ViewModifier {
+    var isShown: Bool
+    var delay: Double
+    var distance: CGFloat
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isUp = false
 
     func body(content: Content) -> some View {
         content
-            .offset(y: reduceMotion ? 0 : (isUp ? -4 : 4))
-            .animation(.easeInOut(duration: 4).repeatForever(autoreverses: true), value: isUp)
-            .onAppear { isUp = true }
+            .opacity(isShown ? 1 : 0)
+            .offset(x: isShown || reduceMotion ? 0 : distance)
+            .animation(.easeOut(duration: 1.2).delay(delay), value: isShown)
+    }
+}
+
+/// Calls back once, the first time the view it sits behind is fully on
+/// screen: in a window, with nothing above it hidden or faded.
+private struct LaunchVisibilityWatcher: UIViewRepresentable {
+    var onVisible: () -> Void
+
+    func makeUIView(context: Context) -> WatcherView {
+        let view = WatcherView()
+        view.onVisible = onVisible
+        return view
+    }
+
+    func updateUIView(_ uiView: WatcherView, context: Context) {
+        uiView.onVisible = onVisible
+    }
+
+    final class WatcherView: UIView {
+        var onVisible: (() -> Void)?
+        private var displayLink: CADisplayLink?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            displayLink?.invalidate()
+            displayLink = nil
+            guard window != nil, onVisible != nil else { return }
+            // Checked every frame, since the system fades the wall in by
+            // animating a view above it rather than telling it anything.
+            let link = CADisplayLink(target: self, selector: #selector(check))
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        }
+
+        @objc private func check() {
+            var view: UIView? = self
+            while let current = view {
+                let opacity = current.layer.presentation()?.opacity ?? current.layer.opacity
+                if current.isHidden || opacity < 0.99 { return }
+                view = current.superview
+            }
+            displayLink?.invalidate()
+            displayLink = nil
+            let onVisible = onVisible
+            self.onVisible = nil
+            onVisible?()
+        }
     }
 }
 
@@ -337,3 +405,4 @@ private struct LaunchLineChart: Shape {
         }
     }
 }
+

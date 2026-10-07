@@ -11,15 +11,33 @@ struct SlideNavigator: View {
 
     @State private var dropTargetID: Slide.ID?
 
+    /// How far in from the strip's ends thumbnails fade, and so how far the
+    /// first and last sit in from them.
+    private static let edgeFade: CGFloat = 16
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(axis == .vertical ? .vertical : .horizontal) {
                 stack
                     .padding(axis == .vertical ? EdgeInsets(top: 4, leading: 12, bottom: 96, trailing: 12)
-                             : EdgeInsets(top: 8, leading: 6, bottom: 8, trailing: 12))
+                             : EdgeInsets(top: 8, leading: Self.edgeFade, bottom: 8, trailing: Self.edgeFade))
                     .animation(.snappy(duration: 0.22), value: presentation.slides.map(\.id))
             }
             .scrollIndicators(.hidden)
+            .mask {
+                // Thumbnails fade out at the strip's ends rather than being cut off.
+                if axis == .horizontal {
+                    HStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: Self.edgeFade)
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: Self.edgeFade)
+                    }
+                } else {
+                    Color.black
+                }
+            }
             .onChange(of: state.selectedSlideID) { _, id in
                 guard let id else { return }
                 withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }

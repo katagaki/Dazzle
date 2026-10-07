@@ -40,6 +40,12 @@ struct SlideCanvas: View {
         var isChange: Bool { current != originals }
     }
 
+    /// The lines a moved or resized shape has settled on.
+    @State private var guides: [Snapping.Guide] = []
+
+    /// How near a line a shape has to come to settle on it, in view points.
+    private static let snapDistance: CGFloat = 6
+
     /// How far above a shape its rotation handle sits, in view points.
     private static let rotationHandleDistance: CGFloat = 28
 
@@ -71,6 +77,8 @@ struct SlideCanvas: View {
                 .gesture(moveGesture(on: slide, scale: scale))
                 .simultaneousGesture(tapGestures(on: slide, scale: scale))
                 .accessibilityIdentifier("slideCanvas")
+
+            guideLines(scale: scale, size: size)
 
             if !state.isDrawing {
                 let selected = displayed.shapes.filter { state.isSelected($0.id) }
@@ -167,14 +175,24 @@ struct SlideCanvas: View {
                     interaction = Interaction(shapes: slide.shapes.filter { state.isSelected($0.id) && $0.isEditable })
                 }
                 guard var current = interaction else { return }
+                var translation = CGSize(width: value.translation.width / scale, height: value.translation.height / scale)
+                // The selection as a whole settles onto nearby lines.
+                let bounds = slide.shapes.filter { current.originals[$0.id] != nil }.map(\.boundingBox)
+                    .reduce(CGRect.null) { $0.union($1) }
+                if !bounds.isNull {
+                    let snapping = snapping(on: slide, excluding: Set(current.originals.keys), scale: scale)
+                    let (offset, settled) = snapping.adjustment(for: bounds.offsetBy(dx: translation.width, dy: translation.height))
+                    translation.width += offset.width
+                    translation.height += offset.height
+                    if settled != guides { guides = settled }
+                }
                 for (id, original) in current.originals {
-                    current.current[id]?.frame = original.frame.offsetBy(
-                        dx: value.translation.width / scale, dy: value.translation.height / scale
-                    )
+                    current.current[id]?.frame = original.frame.offsetBy(dx: translation.width, dy: translation.height)
                 }
                 interaction = current
             }
             .onEnded { value in
+                guides = []
                 if let interaction {
                     commit(interaction)
                     self.interaction = nil
@@ -284,7 +302,19 @@ struct SlideCanvas: View {
                     CGPoint(x: value.translation.width / scale, y: value.translation.height / scale),
                     around: .zero, by: -shape.rotation
                 )
-                let local = Self.resized(original, by: handle, dx: drag.x, dy: drag.y, keepsAspect: handle.isCorner && shape.isPicture)
+                let keepsAspect = handle.isCorner && shape.isPicture
+                var local = Self.resized(original, by: handle, dx: drag.x, dy: drag.y, keepsAspect: keepsAspect)
+                // A square-on shape's moving edges settle onto nearby lines.
+                if shape.rotation == 0, !keepsAspect {
+                    let snapping = snapping(on: state.selectedSlide(in: presentation), excluding: [shape.id], scale: scale)
+                    let (offset, settled) = snapping.adjustment(
+                        for: local, x: Self.lines(handle.unit.x), y: Self.lines(handle.unit.y)
+                    )
+                    local = Self.resized(
+                        original, by: handle, dx: drag.x + offset.width, dy: drag.y + offset.height, keepsAspect: false
+                    )
+                    if settled != guides { guides = settled }
+                }
                 // The side opposite the handle stays put on the slide: the
                 // centre moves by the size change, turned back onto the slide.
                 let shift = Self.rotate(
@@ -299,9 +329,45 @@ struct SlideCanvas: View {
                 interaction = current
             }
             .onEnded { _ in
+                guides = []
                 if let interaction { commit(interaction) }
                 interaction = nil
             }
+    }
+
+    /// The edge a handle moves along one axis, for snapping.
+    private static func lines(_ unit: CGFloat) -> Snapping.Lines {
+        unit < 0 ? .minimum : (unit > 0 ? .maximum : [])
+    }
+
+    // MARK: - Snapping
+
+    private func snapping(on slide: Slide?, excluding ids: Set<SlideShape.ID>, scale: CGFloat) -> Snapping {
+        Snapping(
+            slide: presentation.slideSize.points,
+            others: slide?.shapes.filter { !ids.contains($0.id) }.map(\.boundingBox) ?? [],
+            threshold: Self.snapDistance / scale
+        )
+    }
+
+    /// The guides the shape being moved has settled on, across the slide.
+    private func guideLines(scale: CGFloat, size: CGSize) -> some View {
+        Path { path in
+            for guide in guides {
+                let position = guide.position * scale
+                switch guide.axis {
+                case .vertical:
+                    path.move(to: CGPoint(x: position, y: 0))
+                    path.addLine(to: CGPoint(x: position, y: size.height))
+                case .horizontal:
+                    path.move(to: CGPoint(x: 0, y: position))
+                    path.addLine(to: CGPoint(x: size.width, y: position))
+                }
+            }
+        }
+        .stroke(Color.pink, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
     }
 
     /// `rect` with the edges `handle` moves moved, kept at least a little

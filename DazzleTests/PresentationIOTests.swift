@@ -441,3 +441,22 @@ struct EditingTests {
         #expect(abs(placed.frame.points.midX - 50) < 0.01 && abs(placed.frame.points.midY - 25) < 0.01)
     }
 }
+
+@Suite("Snapping")
+struct SnappingTests {
+    @Test("A shape near the slide's centre line settles on it")
+    func centre() {
+        let snapping = Snapping(slide: CGSize(width: 960, height: 540), others: [], threshold: 5)
+        let (offset, guides) = snapping.adjustment(for: CGRect(x: 428, y: 100, width: 100, height: 50))
+        #expect(offset.width == 2)
+        #expect(offset.height == 0)
+        #expect(guides.contains(.init(axis: .vertical, position: 480)))
+    }
+
+    @Test("A shape lines up with a neighbour's edge, and only within reach")
+    func neighbour() {
+        let snapping = Snapping(slide: CGSize(width: 960, height: 540), others: [CGRect(x: 300, y: 300, width: 80, height: 80)], threshold: 5)
+        #expect(snapping.adjustment(for: CGRect(x: 297, y: 100, width: 40, height: 40), y: []).offset.width == 3)
+        #expect(snapping.adjustment(for: CGRect(x: 250, y: 100, width: 40, height: 40), y: []).offset.width == 0)
+    }
+}

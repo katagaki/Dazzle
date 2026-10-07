@@ -213,7 +213,7 @@ struct FormatPanel: View {
         if !shape.isPicture, case .shape = shape.kind, !PresetGeometry.isOpen(shape.geometry.presetName ?? "") {
             Section("Format.Section.Fill") {
                 FillEditor(
-                    identifier: "fillColor", fill: shape.fill, choices: themeChoices + ColorChoice.system,
+                    identifier: "fillColor", fill: shape.fill ?? inheritedFill(of: shape), choices: themeChoices + ColorChoice.system,
                     onChange: { state.setFill($0 ?? .none, in: &presentation) },
                     onPicture: { state.setFillPicture($0, tiled: $1, in: &presentation) }
                 )
@@ -270,6 +270,13 @@ struct FormatPanel: View {
                 RotateAndFlipButtons(presentation: $presentation, state: state)
             }
         }
+    }
+
+    /// The fill a shape with none of its own gets from its style or layout.
+    private func inheritedFill(of shape: SlideShape) -> Fill? {
+        guard let slide else { return nil }
+        let style = SlideStyleContext(presentation: presentation, slide: slide)
+        return style.fill(for: shape, sources: style.sources(for: shape))?.fill
     }
 
     private func pictureSection(_ shape: SlideShape, picture: SlideShape.Picture) -> some View {

@@ -85,12 +85,14 @@ struct FillEditor: View {
     }
 
     /// The colour the fill has now, to carry over to another kind of fill.
+    /// A style's placeholder colour means nothing outside the style.
     private var firstColor: DrawingColor? {
-        switch fill {
+        let color: DrawingColor? = switch fill {
         case .solid(let color)?: color
         case .gradient(let gradient)?: gradient.stops.first?.color
         default: nil
         }
+        return color?.base == .scheme("phClr") ? nil : color
     }
 
     // MARK: - Gradient
@@ -133,6 +135,11 @@ struct FillEditor: View {
 
     private func update(_ change: (inout Fill.Gradient) -> Void) {
         guard var gradient else { return }
+        // A style's gradient is in its placeholder colour, which means
+        // nothing as a fill of the shape's own; the accent stands in.
+        for index in gradient.stops.indices where gradient.stops[index].color.base == .scheme("phClr") {
+            gradient.stops[index].color.base = .scheme("accent1")
+        }
         change(&gradient)
         onChange(.gradient(gradient))
     }

@@ -304,6 +304,21 @@ struct DeckView: View {
     // MARK: - Keyboard
 
     private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
+        if press.modifiers.contains(.command) {
+            switch press.characters.lowercased() {
+            case "c":
+                state.copySelection(in: document.presentation)
+                return .handled
+            case "x":
+                state.cutSelection(in: &document.presentation)
+                return .handled
+            case "v":
+                state.paste(in: &document.presentation)
+                return .handled
+            default:
+                break
+            }
+        }
         let nudge = press.modifiers.contains(.shift) ? 10.0 : 1.0
         if let shape = state.selectedShape(in: document.presentation) {
             var offset = CGSize.zero

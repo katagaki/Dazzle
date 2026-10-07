@@ -33,6 +33,10 @@ struct ShapeWriter {
         if edits.contains(.identity), shape.source != nil {
             writeIdentity(of: shape, into: element)
         }
+        if edits.contains(.placeholder), shape.placeholder == nil {
+            let details = element.children.first { $0.name.hasPrefix("nv") }?.firstChild(named: "nvPr")
+            if let mark = details?.firstChild(named: "ph") { details?.removeChild(mark) }
+        }
         return XMLLite.serialize(element, inheritedNamespaces: namespaces)
     }
 
@@ -296,6 +300,17 @@ struct ShapeWriter {
             }
             let after = element.children.firstIndex { $0.name == "ln" }
             element.insertChild(fill, at: after.map { $0 + 1 } ?? 0)
+        }
+        if let font = properties.latinFont, let latin = fragment("<a:latin typeface=\"\(XMLLite.escape(font))\"/>") {
+            if let existing = element.firstChild(named: "latin") {
+                element.replaceChild(existing, with: latin)
+            } else {
+                // Typefaces come after fills and underlines, before links.
+                let before = element.children.firstIndex {
+                    ["ea", "cs", "sym", "hlinkClick", "hlinkMouseOver", "rtl", "extLst"].contains($0.name)
+                }
+                element.insertChild(latin, at: before ?? element.children.count)
+            }
         }
         return XMLLite.serialize(element, inheritedNamespaces: fragmentNamespaces) ?? ""
     }

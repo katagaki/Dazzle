@@ -10,6 +10,9 @@ struct SlideRenderer {
         var showsPlaceholderPrompts = false
         /// Leave this shape out, while it is being edited somewhere else.
         var hiddenShapeID: SlideShape.ID?
+        /// Draw the background and the master's and layout's artwork. Off,
+        /// the slide's own shapes are drawn on nothing, for a picture of them alone.
+        var drawsBackground = true
 
         static let presentation = Options()
         static let editing = Options(showsPlaceholderPrompts: true)
@@ -33,15 +36,17 @@ struct SlideRenderer {
         let bounds = CGRect(origin: .zero, size: slideSize)
         context.clip(to: bounds)
 
-        let background = style.background(of: slide)
-        context.setFillColor(RGBAColor.white.cgColor)
-        context.fill(bounds)
-        paint(background.fill, in: CGPath(rect: bounds, transform: nil), bounds: bounds,
-              placeholderColor: background.placeholderColor, style: style, context: context)
+        if options.drawsBackground {
+            let background = style.background(of: slide)
+            context.setFillColor(RGBAColor.white.cgColor)
+            context.fill(bounds)
+            paint(background.fill, in: CGPath(rect: bounds, transform: nil), bounds: bounds,
+                  placeholderColor: background.placeholderColor, style: style, context: context)
+        }
 
         // Master and layout artwork sits under the slide's own shapes.
         // Their placeholders are only templates, so are not drawn.
-        if slide.showsMasterShapes {
+        if slide.showsMasterShapes, options.drawsBackground {
             if style.layout?.showsMasterShapes ?? true {
                 for shape in style.master?.shapes ?? [] where shape.placeholder == nil {
                     draw(shape, sources: [], style: style, context: context)

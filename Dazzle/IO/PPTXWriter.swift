@@ -45,7 +45,11 @@ private struct PackageBuilder {
 
     mutating func build() throws {
         for path in presentation.addedParts.keys {
-            contentTypes.ensureDefault(for: path)
+            if let type = presentation.addedContentTypes[path] {
+                contentTypes.setOverride(type, for: path)
+            } else {
+                contentTypes.ensureDefault(for: path)
+            }
         }
         assignPartNames()
         removeDeletedSlides()
@@ -369,6 +373,14 @@ private struct ContentTypes {
         case "png": "image/png"
         case "jpg", "jpeg": "image/jpeg"
         case "gif": "image/gif"
+        case "xml": "application/xml"
+        case "rels": "application/vnd.openxmlformats-package.relationships+xml"
+        case "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        case "mp4", "m4v": "video/mp4"
+        case "mov": "video/quicktime"
+        case "m4a": "audio/mp4"
+        case "mp3": "audio/mpeg"
+        case "wav": "audio/wav"
         default: "application/octet-stream"
         }
         defaults.append((ext, type))

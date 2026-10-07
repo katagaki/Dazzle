@@ -14,6 +14,9 @@ struct Presentation: Equatable, Sendable {
     let package: Package
     /// Parts Dazzle has added since, such as pictures.
     var addedParts: [String: Data] = [:]
+    /// Content types for added parts that their extension does not settle,
+    /// such as a chart's XML.
+    var addedContentTypes: [String: String] = [:]
     /// Whether slides were added, removed or reordered, which means the
     /// slide list itself has to be written again.
     var isStructureModified = false
@@ -23,6 +26,18 @@ struct Presentation: Equatable, Sendable {
     /// The bytes of a part, whether read or added.
     func data(at path: String) -> Data? {
         addedParts[path] ?? package.parts[path]
+    }
+
+    /// Every part name in use, read or added.
+    var partNames: Set<String> {
+        Set(package.parts.keys).union(addedParts.keys)
+    }
+
+    /// A part's content type: one Dazzle gave it, or what the package's
+    /// `[Content_Types].xml` says.
+    func contentType(of path: String) -> String? {
+        if let added = addedContentTypes[path] { return added }
+        return package.contentTypes.type(of: path)
     }
 
     func index(of slideID: Slide.ID?) -> Int? {
@@ -47,14 +62,43 @@ final class Package: Equatable, Sendable {
     /// Where the presentation part lives, normally `ppt/presentation.xml`.
     let mainPart: String
     let unsupportedFeatures: UnsupportedFeatureReport
+    let contentTypes: ContentTypeMap
 
     init(parts: [String: Data], mainPart: String, unsupportedFeatures: UnsupportedFeatureReport) {
         self.parts = parts
         self.mainPart = mainPart
         self.unsupportedFeatures = unsupportedFeatures
+        contentTypes = ContentTypeMap(data: parts["[Content_Types].xml"])
     }
 
     static func == (lhs: Package, rhs: Package) -> Bool { lhs === rhs }
+}
+
+/// `[Content_Types].xml`, for looking types up.
+struct ContentTypeMap: Sendable {
+    private var defaults: [String: String] = [:]
+    private var overrides: [String: String] = [:]
+
+    init(data: Data?) {
+        guard let data, let root = try? XMLLite.parse(data) else { return }
+        for element in root.children(named: "Default") {
+            if let ext = element.attribute("Extension"), let type = element.attribute("ContentType") {
+                defaults[ext.lowercased()] = type
+            }
+        }
+        for element in root.children(named: "Override") {
+            if let part = element.attribute("PartName"), let type = element.attribute("ContentType") {
+                overrides[String(part.drop { $0 == "/" })] = type
+            }
+        }
+    }
+
+    func type(of path: String) -> String? {
+        overrides[path] ?? defaults[(path as NSString).pathExtension.lowercased()]
+    }
+
+    /// Whether the type comes from an override rather than the extension.
+    func isOverridden(_ path: String) -> Bool { overrides[path] != nil }
 }
 
 /// One slide.

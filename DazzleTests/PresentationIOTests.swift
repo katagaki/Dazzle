@@ -460,3 +460,86 @@ struct SnappingTests {
         #expect(snapping.adjustment(for: CGRect(x: 250, y: 100, width: 40, height: 40), y: []).offset.width == 0)
     }
 }
+
+@Suite("Copy and paste")
+@MainActor
+struct PasteTests {
+    /// A saved and reopened deck with a picture on its one slide, so the
+    /// picture's XML names its image by relationship id.
+    private func deckWithPicture() throws -> Presentation {
+        var presentation = Presentation.blank
+        let png = try #require(SlideExporter.image(of: presentation.slides[0], in: presentation, width: 32, format: .png))
+        presentation.addedParts["ppt/media/image1.png"] = png
+        var shape = SlideShape(
+            shapeID: 10, name: "Picture 1", kind: .picture(SlideShape.Picture(imagePath: "ppt/media/image1.png")),
+            frame: EMURect(x: 0, y: 0, width: 914_400, height: 514_350)
+        )
+        shape.hasOwnFrame = true
+        presentation.slides[0].shapes.append(shape)
+        presentation.slides[0].isModified = true
+        return try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+    }
+
+    private func reread(_ presentation: Presentation) throws -> Presentation {
+        try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+    }
+
+    @Test("A picture pasted into another presentation brings its image along")
+    func pictureAcrossDecks() throws {
+        let source = try deckWithPicture()
+        let picture = try #require(source.slides[0].shapes.last)
+        var target = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(target.slides[0].id)
+        state.pasteShapes([picture], from: source.slides[0], of: source, into: &target)
+
+        let saved = try reread(target)
+        let pasted = try #require(saved.slides[0].shapes.last)
+        guard case .picture(let read) = pasted.kind, let path = read.imagePath else {
+            Issue.record("Expected a picture with an image")
+            return
+        }
+        #expect(saved.data(at: path) == source.data(at: "ppt/media/image1.png"))
+    }
+
+    @Test("A picture pasted onto another slide of its own deck gets a relationship there")
+    func pictureAcrossSlides() throws {
+        var deck = try deckWithPicture()
+        let state = EditorState()
+        let layout = try #require(deck.resources.orderedLayouts.last)
+        state.selectSlide(deck.slides[0].id)
+        state.addSlide(using: layout, in: &deck)
+        state.pasteShapes([try #require(deck.slides[0].shapes.last)], from: deck.slides[0], of: deck, into: &deck)
+
+        let saved = try reread(deck)
+        guard case .picture(let read) = try #require(saved.slides[1].shapes.last).kind else {
+            Issue.record("Expected a picture")
+            return
+        }
+        #expect(read.imagePath == "ppt/media/image1.png")
+    }
+
+    @Test("A slide pasted into another presentation lands on a layout of the same name")
+    func slideAcrossDecks() throws {
+        var source = Presentation.blank
+        source.slides[0].shapes[0].text?.setPlainText("Imported")
+        source.slides[0].shapes[0].edits.insert(.text)
+        source.slides[0].isModified = true
+        source = try reread(source)
+        var target = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(target.slides[0].id)
+        state.pasteSlides([source.slides[0]], from: source, into: &target)
+
+        let saved = try reread(target)
+        #expect(saved.slides.count == 2)
+        #expect(saved.slides[1].title == "Imported")
+        #expect(saved.layout(for: saved.slides[1])?.name == "Title Slide")
+    }
+
+    @Test("Part names step past ones already taken")
+    func unusedNames() {
+        #expect(PartImporter.unusedName(like: "ppt/charts/chart3.xml", taken: ["ppt/charts/chart1.xml"]) == "ppt/charts/chart2.xml")
+        #expect(PartImporter.unusedName(like: "ppt/embeddings/Sheet.xlsx", taken: []) == "ppt/embeddings/Sheet1.xlsx")
+    }
+}

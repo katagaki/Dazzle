@@ -140,24 +140,7 @@ final class EditorState {
 
     func duplicateSlide(_ id: Slide.ID, in presentation: inout Presentation) {
         guard let index = presentation.index(of: id) else { return }
-        let original = presentation.slides[index]
-        var copy = Slide(layoutPath: original.layoutPath, relationships: original.relationships, shapes: original.shapes)
-        copy.sourcePart = original.sourcePart
-        copy.background = original.background
-        copy.isHidden = original.isHidden
-        copy.showsMasterShapes = original.showsMasterShapes
-        copy.canEditShapes = original.canEditShapes
-        copy.isBackgroundModified = original.isBackgroundModified
-        copy.hasRemovedShapes = original.hasRemovedShapes
-        // Notes and comments belong to one slide; the copy gets its own notes.
-        copy.relationships.removeAll {
-            $0.type == OOXML.RelationshipType.notesSlide || $0.type == OOXML.RelationshipType.comments
-                || $0.type.hasSuffix("/comments")
-        }
-        copy.notes = original.notes
-        copy.areNotesModified = !original.notes.isEmpty
-        copy.isModified = original.isModified
-        copy.shapes = copy.shapes.map(SlideShape.init(copying:))
+        let copy = Self.duplicate(of: presentation.slides[index])
         presentation.slides.insert(copy, at: index + 1)
         presentation.isStructureModified = true
         selectSlide(copy.id)

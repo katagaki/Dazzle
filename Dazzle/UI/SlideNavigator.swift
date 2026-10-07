@@ -95,6 +95,19 @@ struct SlideNavigator: View {
         Button("Slide.Menu.Duplicate", systemImage: "plus.square.on.square") {
             state.duplicateSlide(slide.id, in: &presentation)
         }
+        Section {
+            Button("Edit.Copy", systemImage: "doc.on.doc") {
+                state.copySlides([slide.id], in: presentation)
+            }
+            Button("Edit.Cut", systemImage: "scissors") {
+                state.cutSlide(slide.id, in: &presentation)
+            }
+            .disabled(presentation.slides.count < 2)
+            Button("Edit.PasteAfter", systemImage: "doc.on.clipboard") {
+                state.selectSlide(slide.id)
+                state.paste(in: &presentation)
+            }
+        }
         Button(slide.isHidden ? "Slide.Menu.Show" : "Slide.Menu.Hide", systemImage: slide.isHidden ? "eye" : "eye.slash") {
             state.toggleHidden(slide.id, in: &presentation)
         }

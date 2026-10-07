@@ -29,7 +29,33 @@ enum SlideExporter {
         return data as Data
     }
 
-    static func cgImage(of slide: Slide, in presentation: Presentation, width: Int, opaque: Bool = true) -> CGImage? {
+    /// Some of a slide's shapes alone, on transparency, cropped to them: what
+    /// is put on the pasteboard for other apps when shapes are copied.
+    static func png(of shapes: [SlideShape], on slide: Slide, in presentation: Presentation, scale: CGFloat = 2) -> Data? {
+        let bounds = shapes.map(\.boundingBox).reduce(CGRect.null) { $0.union($1) }
+            .intersection(CGRect(origin: .zero, size: presentation.slideSize.points))
+        guard !bounds.isNull, bounds.width >= 1, bounds.height >= 1 else { return nil }
+        var alone = slide
+        alone.shapes = shapes
+        var options = SlideRenderer.Options.presentation
+        options.drawsBackground = false
+        let width = Int((presentation.slideSize.points.width * scale).rounded())
+        guard let image = cgImage(of: alone, in: presentation, width: width, opaque: false, options: options),
+              let cropped = image.cropping(to: CGRect(
+                x: bounds.minX * scale, y: bounds.minY * scale, width: bounds.width * scale, height: bounds.height * scale
+              ).integral) else { return nil }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, cropped, nil)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
+
+    static func cgImage(
+        of slide: Slide, in presentation: Presentation, width: Int, opaque: Bool = true,
+        options: SlideRenderer.Options = .presentation
+    ) -> CGImage? {
         let aspect = presentation.slideSize.aspectRatio
         let height = max(Int((Double(width) / aspect).rounded()), 1)
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
@@ -40,7 +66,8 @@ enum SlideExporter {
         // Bitmap contexts count y upwards; slides are drawn downwards.
         context.translateBy(x: 0, y: CGFloat(height))
         context.scaleBy(x: 1, y: -1)
-        SlideRenderer(presentation: presentation, slide: slide).draw(in: context, size: CGSize(width: width, height: height))
+        SlideRenderer(presentation: presentation, slide: slide, options: options)
+            .draw(in: context, size: CGSize(width: width, height: height))
         return context.makeImage()
     }
 

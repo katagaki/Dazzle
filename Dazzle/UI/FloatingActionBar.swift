@@ -76,6 +76,7 @@ struct FloatingActionBar: View {
 
     private var slideGroup: some View {
         group {
+            editMenu
             panelAction("note.text", label: "ActionBar.Notes", panel: .notes)
                 .accessibilityIdentifier("notes")
             panelAction("paintpalette", label: "ActionBar.Format", panel: .format)
@@ -133,6 +134,29 @@ struct FloatingActionBar: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("insertShape")
         .accessibilityLabel("ActionBar.Shape")
+    }
+
+    /// Copy, cut and paste: the selected shapes, or with none, the slide.
+    private var editMenu: some View {
+        Menu {
+            let hasSelection = !state.selectedShapeIDs.isEmpty
+            Button(hasSelection ? "Edit.Copy" : "Edit.CopySlide", systemImage: "doc.on.doc") {
+                state.copySelection(in: presentation)
+            }
+            Button(hasSelection ? "Edit.Cut" : "Edit.CutSlide", systemImage: "scissors") {
+                state.cutSelection(in: &presentation)
+            }
+            .disabled(!hasSelection && presentation.slides.count < 2)
+            Button("Edit.Paste", systemImage: "doc.on.clipboard") {
+                state.paste(in: &presentation)
+            }
+        } label: {
+            ActionSymbol(name: "doc.on.clipboard", isOn: false)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("edit")
+        .accessibilityLabel("ActionBar.Edit")
     }
 
     private func arrangeMenu(for shape: SlideShape) -> some View {

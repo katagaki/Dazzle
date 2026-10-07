@@ -12,6 +12,8 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
         case text
         /// A copy, which needs ids of its own.
         case identity
+        /// No longer a placeholder: pasted where its layout has no place for it.
+        case placeholder
     }
 
     enum Kind: Equatable, Hashable, Sendable {

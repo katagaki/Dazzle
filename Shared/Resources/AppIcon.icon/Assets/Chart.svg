@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    A slide on the screen: a pie chart with one slice pulled out of it, and
+    lines of text set beside it. Drawn solid white so it holds up in dark
+    mode, where see-through shapes would fade into the screen behind them.
+    The text lines share Libretto's weight, and the bezel's.
+  -->
+  <g fill="#FFFFFF">
+    <path d="M364 512L364 396A116 116 0 1 1 248 512Z"/>
+    <path d="M352 500L236 500A116 116 0 0 1 352 384Z"/>
+    <rect x="540" y="390" width="248" height="28" rx="14"/>
+    <rect x="540" y="462" width="248" height="28" rx="14"/>
+    <rect x="540" y="534" width="248" height="28" rx="14"/>
+    <rect x="540" y="606" width="168" height="28" rx="14"/>
+  </g>
+</svg>

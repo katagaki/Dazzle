@@ -53,8 +53,8 @@
           ],
           "glass" : true,
           "hidden" : false,
-          "image-name" : "Bento.svg",
-          "name" : "Bento",
+          "image-name" : "Chart.svg",
+          "name" : "Chart",
           "position-specializations" : [
             {
               "value" : {

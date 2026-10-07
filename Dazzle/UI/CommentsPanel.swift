@@ -15,14 +15,15 @@ struct CommentsPanel: View {
 
     var body: some View {
         Form {
-            if authorName.trimmed.isEmpty {
-                Section {
+            Section {
+                LabeledContent("Comments.CommentAs") {
                     TextField("Comments.YourName", text: $authorName)
                         .textContentType(.name)
+                        .multilineTextAlignment(.trailing)
                         .accessibilityIdentifier("commentAuthor")
-                } footer: {
-                    Text("Comments.YourName.Footer")
                 }
+            } footer: {
+                if authorName.trimmed.isEmpty { Text("Comments.YourName.Footer") }
             }
 
             if comments.isEmpty {

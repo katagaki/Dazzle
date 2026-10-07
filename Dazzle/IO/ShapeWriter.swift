@@ -81,6 +81,15 @@ struct ShapeWriter {
                 <a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm>\
                 </p:grpSpPr>\(members)</p:grpSp>
                 """
+        case .chart(let chart?):
+            let reference = relationshipID(for: chart.path, type: OOXML.RelationshipType.chart)
+            return """
+                <p:graphicFrame><p:nvGraphicFramePr>\(identity)<p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>\
+                <p:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></p:xfrm><a:graphic><a:graphicData \
+                uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart \
+                xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="\(reference)"/></a:graphicData>\
+                </a:graphic></p:graphicFrame>
+                """
         case .table:
             return """
                 <p:graphicFrame><p:nvGraphicFramePr>\(identity)<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/>\
@@ -131,16 +140,18 @@ struct ShapeWriter {
 
     /// The id of the slide's relationship to an image, adding one if needed.
     private mutating func relationshipID(forImage path: String) -> String {
+        relationshipID(for: path, type: OOXML.RelationshipType.image)
+    }
+
+    /// The id of the slide's relationship of `type` to a part, adding one if needed.
+    mutating func relationshipID(for path: String, type: String) -> String {
         if let existing = relationships.first(where: {
-            $0.type == OOXML.RelationshipType.image && !$0.isExternal
-                && PackagePath.resolve($0.target, from: partPath) == path
+            $0.type == type && !$0.isExternal && PackagePath.resolve($0.target, from: partPath) == path
         }) {
             return existing.id
         }
         let id = Relationship.unusedID(in: relationships)
-        relationships.append(Relationship(
-            id: id, type: OOXML.RelationshipType.image, target: PackagePath.relativeTarget(to: path, from: partPath)
-        ))
+        relationships.append(Relationship(id: id, type: type, target: PackagePath.relativeTarget(to: path, from: partPath)))
         return id
     }
 

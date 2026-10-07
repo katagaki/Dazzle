@@ -892,3 +892,92 @@ struct SlideSizeTests {
         #expect(size == Int((6_000 * factor).rounded()))
     }
 }
+
+@Suite("Charts")
+@MainActor
+struct ChartTests {
+    private func reread(_ presentation: Presentation) throws -> Presentation {
+        try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+    }
+
+    @Test("A new chart is written with its data and a workbook, and reads back")
+    func insert() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.insertChart(.column, in: &presentation)
+        let copy = try reread(presentation)
+        guard case .chart(let chart?) = try #require(copy.slides[0].shapes.last).kind else {
+            Issue.record("Expected a chart")
+            return
+        }
+        #expect(chart.kind == .column)
+        #expect(chart.categories.count == 4)
+        #expect(chart.allSeries.map { $0.values.first ?? nil } == [4.3, 2.4, 2])
+        #expect(copy.unsupportedFeatures.isEmpty)
+        let workbook = try #require(ChartWriter.workbookPath(of: chart, in: copy))
+        let sheet = try ZipArchive.entries(in: try #require(copy.data(at: workbook)))["xl/worksheets/sheet1.xml"]
+        #expect(String(decoding: try #require(sheet), as: UTF8.self).contains("<v>4.3</v>"))
+    }
+
+    @Test("Editing values, type, title and legend is written to the chart's part")
+    func edit() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.insertChart(.column, in: &presentation)
+        var copy = try reread(presentation)
+        let reopened = EditorState()
+        reopened.selectSlide(copy.slides[0].id)
+        reopened.selectedShapeID = copy.slides[0].shapes.last?.id
+        reopened.updateChart(in: &copy) { chart in
+            chart.plots[0].series[1].values[2] = 9
+            chart.categories.append("Extra")
+            for index in chart.plots[0].series.indices { chart.plots[0].series[index].values.append(1) }
+            chart.plots[0].grouping = .stacked
+            chart.plots[0].kind = .bar
+            chart.title = "Quarterly"
+            chart.legendPosition = "r"
+        }
+        let final = try reread(copy)
+        guard case .chart(let chart?) = try #require(final.slides[0].shapes.last).kind else {
+            Issue.record("Expected a chart")
+            return
+        }
+        #expect(chart.kind == .bar)
+        #expect(chart.plots[0].grouping == .stacked)
+        #expect(chart.categories.last == "Extra")
+        #expect(chart.allSeries[1].values[2] == 9)
+        #expect(chart.title == "Quarterly")
+        #expect(chart.legendPosition == "r")
+
+        reopened.selectedShapeID = final.slides[0].shapes.last?.id
+        var pie = final
+        reopened.selectSlide(pie.slides[0].id)
+        reopened.selectedShapeID = pie.slides[0].shapes.last?.id
+        reopened.updateChart(in: &pie) { $0.plots = [Chart.Plot(kind: .pie, series: [$0.allSeries[0]])] }
+        guard case .chart(let pieChart?) = try #require(try reread(pie).slides[0].shapes.last).kind else {
+            Issue.record("Expected a chart")
+            return
+        }
+        #expect(pieChart.kind == .pie)
+        #expect(pieChart.allSeries.count == 1)
+    }
+
+    @Test("Value axes round to steps of 1, 2 or 5")
+    func scale() {
+        let scale = ChartRenderer.Scale.nice(low: 0, high: 4.5)
+        #expect(scale.minimum == 0 && scale.maximum == 5 && scale.step == 1)
+        #expect(ChartWriter.columnLetter(28) == "AB")
+    }
+
+    @Test("Charts render", arguments: Chart.Kind.allCases)
+    func render(kind: Chart.Kind) throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.insertChart(kind, in: &presentation)
+        let png = try #require(SlideExporter.image(of: presentation.slides[0], in: presentation, width: 960, format: .png))
+        #expect(png.starts(with: [0x89, 0x50, 0x4E, 0x47]))
+    }
+}

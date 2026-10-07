@@ -59,6 +59,7 @@ struct FloatingActionBar: View {
             .accessibilityIdentifier("insertTextBox")
             shapeMenu
             tableMenu
+            chartMenu
             PhotosPicker(selection: $photo, matching: .images) {
                 ActionSymbol(name: "photo", isOn: false)
             }
@@ -110,6 +111,10 @@ struct FloatingActionBar: View {
                     state.croppingShapeID = state.croppingShapeID == shape.id ? nil : shape.id
                 }
                 .accessibilityIdentifier("crop")
+            }
+            if case .chart(_?) = shape.kind, shape.isEditable, !state.hasMultipleSelection {
+                panelAction("chart.bar.doc.horizontal", label: "ActionBar.ChartData", panel: .chart)
+                    .accessibilityIdentifier("chartData")
             }
             if case .table = shape.kind, shape.isEditable, !state.hasMultipleSelection {
                 TableMenu(presentation: $presentation, state: state) {
@@ -175,6 +180,25 @@ struct FloatingActionBar: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("insertTable")
         .accessibilityLabel("ActionBar.Table")
+    }
+
+    /// A new chart, by kind.
+    private var chartMenu: some View {
+        Menu {
+            ForEach(Chart.Kind.allCases, id: \.self) { kind in
+                Button {
+                    state.insertChart(kind, in: &presentation)
+                } label: {
+                    Label(kind.label, systemImage: kind.symbol)
+                }
+            }
+        } label: {
+            ActionSymbol(name: "chart.bar", isOn: false)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("insertChart")
+        .accessibilityLabel("ActionBar.Chart")
     }
 
     /// Rows by columns.

@@ -151,7 +151,8 @@ struct PartImporter {
         var paths: [String: String] = [:]
         func path(_ old: String) -> String {
             if let done = paths[old] { return done }
-            let new = sharesPackage ? old : (importPart(old) ?? old)
+            // A part the shape's XML already brought over goes where it went.
+            let new = imported[old] ?? (sharesPackage ? old : (importPart(old) ?? old))
             paths[old] = new
             return new
         }
@@ -226,6 +227,9 @@ extension SlideShape {
             shape.kind = .group(group)
         case .diagram(let children):
             shape.kind = .diagram(children.map { $0.remapped(xml: xml, path: path) })
+        case .chart(var chart?):
+            chart.path = path(chart.path)
+            shape.kind = .chart(chart)
         case .table(var table):
             for row in table.rows.indices {
                 for cell in table.rows[row].cells.indices {

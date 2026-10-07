@@ -7,12 +7,14 @@ enum EditorPanel: String, Identifiable, Hashable {
     case notes
     case export
     case find
+    case chart
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .find: String(localized: "Panel.Find.Title")
+        case .chart: String(localized: "Panel.Chart.Title")
         case .text: String(localized: "Panel.Text.Title")
         case .format: String(localized: "Panel.Format.Title")
         case .notes: String(localized: "Panel.Notes.Title")
@@ -593,6 +595,79 @@ final class EditorState {
                 shape.hasOwnFrame = true
             }
         }
+    }
+
+    // MARK: - Charts
+
+    func selectedChart(in presentation: Presentation) -> Chart? {
+        guard let shape = selectedShape(in: presentation), case .chart(let chart?) = shape.kind else { return nil }
+        return chart
+    }
+
+    /// Changes the selected chart, writing its part and its workbook anew.
+    func updateChart(in presentation: inout Presentation, _ change: (inout Chart) -> Void) {
+        guard let shape = selectedShape(in: presentation), shape.isEditable, case .chart(var chart?) = shape.kind,
+              let slideIndex = presentation.index(of: selectedSlideID ?? presentation.slides.first?.id),
+              presentation.slides[slideIndex].canEditShapes else { return }
+        let before = chart
+        change(&chart)
+        guard chart != before else { return }
+
+        // A chart part another slide also shows gets a copy of its own first.
+        let isShared = presentation.slides.enumerated().contains { index, slide in
+            slide.shapes.contains { other in
+                guard other.id != shape.id, case .chart(let otherChart?) = other.kind else { return false }
+                return otherChart.path == chart.path
+            }
+        }
+        if isShared {
+            var importer = PartImporter(from: presentation, into: presentation)
+            if let copy = importer.importPart(chart.path) {
+                presentation.addedParts = importer.target.addedParts
+                presentation.addedContentTypes = importer.target.addedContentTypes
+                let slidePart = presentation.slides[slideIndex].partName ?? PartImporter.newSlidePart
+                for index in presentation.slides[slideIndex].relationships.indices {
+                    let relationship = presentation.slides[slideIndex].relationships[index]
+                    guard relationship.type == OOXML.RelationshipType.chart,
+                          PackagePath.resolve(relationship.target, from: slidePart) == chart.path else { continue }
+                    presentation.slides[slideIndex].relationships[index].target = PackagePath.relativeTarget(to: copy, from: slidePart)
+                }
+                chart.path = copy
+            }
+        }
+
+        guard let data = ChartWriter.data(for: chart, original: presentation.data(at: chart.path)) else { return }
+        presentation.addedParts[chart.path] = data
+        if let workbook = ChartWriter.workbookPath(of: chart, in: presentation), let contents = ChartWriter.workbook(for: chart) {
+            presentation.addedParts[workbook] = contents
+        }
+        // Read back, so each plot and series holds the XML it now has.
+        let written = Chart(path: chart.path, data: data) ?? chart
+        updateShape(shape.id, edits: [], in: &presentation) { $0.kind = .chart(written) }
+    }
+
+    /// Adds a chart of `kind`, with PowerPoint's sample data, in the middle of the slide.
+    func insertChart(_ kind: Chart.Kind, in presentation: inout Presentation) {
+        guard let slide = selectedSlide(in: presentation) else { return }
+        let taken = presentation.partNames
+        let path = PackagePath.unused(prefix: "ppt/charts/chart", suffix: ".xml", taken: taken)
+        let workbook = PackagePath.unused(prefix: "ppt/embeddings/Microsoft_Excel_Worksheet", suffix: ".xlsx", taken: taken)
+        var chart = Chart.sample(kind, path: path)
+        guard let data = ChartWriter.data(for: chart, original: nil, workbookRelationship: "rId1"),
+              let contents = ChartWriter.workbook(for: chart) else { return }
+        presentation.addedParts[path] = data
+        presentation.addedContentTypes[path] = ChartWriter.contentType
+        presentation.addedParts[workbook] = contents
+        presentation.addedParts[PackagePath.relationships(of: path)] = Relationship.xml([
+            Relationship(id: "rId1", type: OOXML.RelationshipType.package, target: PackagePath.relativeTarget(to: workbook, from: path)),
+        ])
+        chart = Chart(path: path, data: data) ?? chart
+        let bounds = presentation.slideSize.points
+        let shape = SlideShape(
+            shapeID: slide.nextShapeID, name: "Chart \(slide.nextShapeID - 1)", kind: .chart(chart),
+            frame: centered(CGSize(width: bounds.width * 0.6, height: bounds.height * 0.6), in: presentation)
+        )
+        insert(shape, in: &presentation)
     }
 
     // MARK: - Groups

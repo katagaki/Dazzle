@@ -85,11 +85,24 @@ struct FloatingActionBar: View {
 
     private func selectionGroup(for shape: SlideShape) -> some View {
         group {
-            if shape.canHoldText, shape.isEditable {
+            action(
+                "checkmark.circle", isOn: state.isSelectingMultiple, label: "ActionBar.SelectMultiple"
+            ) {
+                state.isSelectingMultiple.toggle()
+            }
+            .accessibilityIdentifier("selectMultiple")
+            if shape.canHoldText, shape.isEditable, !state.hasMultipleSelection {
                 panelAction("character.cursor.ibeam", label: "ActionBar.EditText", panel: .text)
                     .accessibilityIdentifier("editText")
             }
             if shape.isEditable {
+                AlignMenu(presentation: $presentation, state: state) {
+                    ActionSymbol(name: "align.horizontal.left", isOn: false)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("align")
+                .accessibilityLabel("ActionBar.Align")
                 arrangeMenu(for: shape)
                 action("plus.square.on.square", label: "ActionBar.Duplicate") {
                     state.duplicateSelectedShape(in: &presentation)
@@ -136,7 +149,7 @@ struct FloatingActionBar: View {
             Button("Arrange.Back", systemImage: "square.3.layers.3d.bottom.filled") {
                 state.arrangeSelectedShape(.back, in: &presentation)
             }
-            if shape.canRotate {
+            if shape.canRotate, !state.hasMultipleSelection {
                 RotateAndFlipButtons(presentation: $presentation, state: state)
             }
         } label: {
@@ -185,6 +198,56 @@ struct FloatingActionBar: View {
             return
         }
         state.insertPicture(media, in: &presentation)
+    }
+}
+
+/// Lining shapes up: with each other when several are selected, with the
+/// slide when one is.
+struct AlignMenu<Label: View>: View {
+    @Binding var presentation: Presentation
+    @Bindable var state: EditorState
+    @ViewBuilder var label: () -> Label
+
+    var body: some View {
+        Menu {
+            AlignButtons(presentation: $presentation, state: state)
+        } label: {
+            label()
+        }
+    }
+}
+
+struct AlignButtons: View {
+    @Binding var presentation: Presentation
+    @Bindable var state: EditorState
+
+    private static let choices: [(EditorState.Alignment, LocalizedStringKey, String)] = [
+        (.left, "Align.Left", "align.horizontal.left"),
+        (.center, "Align.Center", "align.horizontal.center"),
+        (.right, "Align.Right", "align.horizontal.right"),
+        (.top, "Align.Top", "align.vertical.top"),
+        (.middle, "Align.Middle", "align.vertical.center"),
+        (.bottom, "Align.Bottom", "align.vertical.bottom"),
+    ]
+
+    var body: some View {
+        Section(state.hasMultipleSelection ? "Align.ToEachOther" : "Align.ToSlide") {
+            ForEach(Self.choices, id: \.2) { alignment, label, symbol in
+                Button(label, systemImage: symbol) {
+                    state.alignSelectedShapes(alignment, in: &presentation)
+                }
+            }
+        }
+        if state.selectedShapeIDs.count > 2 {
+            Section {
+                Button("Align.DistributeHorizontally", systemImage: "distribute.horizontal.center") {
+                    state.distributeSelectedShapes(horizontally: true, in: &presentation)
+                }
+                Button("Align.DistributeVertically", systemImage: "distribute.vertical.center") {
+                    state.distributeSelectedShapes(horizontally: false, in: &presentation)
+                }
+            }
+        }
     }
 }
 

@@ -128,7 +128,8 @@ struct FormatPanel: View {
                 state.arrangeSelectedShape(.back, in: &presentation)
             }
         }
-        if shape.canRotate {
+        AlignButtons(presentation: $presentation, state: state)
+        if shape.canRotate, !state.hasMultipleSelection {
             Section("Format.Section.Rotate") {
                 LabeledContent("Format.Rotation") {
                     Stepper(

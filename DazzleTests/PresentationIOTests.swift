@@ -353,3 +353,54 @@ struct PictureEffectTests {
         #expect(TextRenderer.symbolsMapped("plain") == "plain")
     }
 }
+
+@Suite("Editing")
+@MainActor
+struct EditingTests {
+    /// A blank deck with three plain shapes added, selected in turn.
+    private func deck(with frames: [CGRect]) -> (Presentation, EditorState) {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        for frame in frames {
+            state.insertShape("rect", in: &presentation)
+            if let id = state.selectedShapeID { state.setFrame(frame, of: id, in: &presentation) }
+        }
+        state.selectedShapeIDs = presentation.slides[0].shapes.suffix(frames.count).map(\.id)
+        return (presentation, state)
+    }
+
+    @Test("Aligning lines the selection up with its own edges")
+    func align() {
+        var (presentation, state) = deck(with: [
+            CGRect(x: 10, y: 10, width: 50, height: 50), CGRect(x: 100, y: 40, width: 20, height: 20),
+        ])
+        state.alignSelectedShapes(.right, in: &presentation)
+        let frames = state.selectedShapes(in: presentation).map(\.frame.points)
+        #expect(frames.count == 2)
+        #expect(frames.allSatisfy { abs($0.maxX - 120) < 0.01 })
+    }
+
+    @Test("Distributing spaces shapes evenly between the outermost two")
+    func distribute() {
+        var (presentation, state) = deck(with: [
+            CGRect(x: 0, y: 0, width: 10, height: 10), CGRect(x: 15, y: 0, width: 10, height: 10),
+            CGRect(x: 90, y: 0, width: 10, height: 10),
+        ])
+        state.distributeSelectedShapes(horizontally: true, in: &presentation)
+        let xs = state.selectedShapes(in: presentation).map(\.frame.points.minX).sorted()
+        #expect(abs(xs[1] - 45) < 0.01)
+    }
+
+    @Test("Bringing several shapes forward keeps their order among themselves")
+    func arrangeForward() {
+        var (presentation, state) = deck(with: [
+            CGRect(x: 0, y: 0, width: 10, height: 10), CGRect(x: 0, y: 0, width: 10, height: 10),
+            CGRect(x: 0, y: 0, width: 10, height: 10),
+        ])
+        let ids = presentation.slides[0].shapes.suffix(3).map(\.id)
+        state.selectedShapeIDs = [ids[0], ids[1]]
+        state.arrangeSelectedShape(.forward, in: &presentation)
+        #expect(Array(presentation.slides[0].shapes.suffix(3).map(\.id)) == [ids[2], ids[0], ids[1]])
+    }
+}

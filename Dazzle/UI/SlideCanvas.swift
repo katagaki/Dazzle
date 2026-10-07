@@ -1,12 +1,15 @@
+import GameController
 import SwiftUI
 
 /// The slide being edited, fitted to the space it has, with the selected
-/// shape's frame and handles drawn over it.
+/// shapes' frames, and a lone selected shape's handles, drawn over it.
 ///
 /// Tap a shape to select it, drag it to move it, drag a handle to resize
 /// it, drag the handle above it to turn it, and double-tap one with text to
-/// edit the text. Moves, resizes and turns are previewed live and written to
-/// the document once, when the finger lifts, so each is a single undo step.
+/// edit the text. Shift-tap, or tap while selecting several, to add a shape
+/// to the selection; dragging any of them moves them all. Moves, resizes and
+/// turns are previewed live and written to the document once, when the
+/// finger lifts, so each is a single undo step.
 struct SlideCanvas: View {
     @Binding var presentation: Presentation
     @Bindable var state: EditorState
@@ -19,21 +22,22 @@ struct SlideCanvas: View {
     @State private var interaction: Interaction?
 
     private struct Interaction: Equatable {
-        var shapeID: SlideShape.ID
-        var original: CGRect
-        var frame: CGRect
-        var originalRotation: Double
-        var rotation: Double
-
-        init(shapeID: SlideShape.ID, original: CGRect, frame: CGRect, rotation: Double) {
-            self.shapeID = shapeID
-            self.original = original
-            self.frame = frame
-            originalRotation = rotation
-            self.rotation = rotation
+        struct Placement: Equatable {
+            var frame: CGRect
+            var rotation: Double
         }
 
-        var isChange: Bool { frame != original || rotation != originalRotation }
+        var originals: [SlideShape.ID: Placement]
+        var current: [SlideShape.ID: Placement]
+
+        init(shapes: [SlideShape]) {
+            originals = Dictionary(uniqueKeysWithValues: shapes.map {
+                ($0.id, Placement(frame: $0.frame.points, rotation: $0.rotation))
+            })
+            current = originals
+        }
+
+        var isChange: Bool { current != originals }
     }
 
     /// How far above a shape its rotation handle sits, in view points.
@@ -68,8 +72,15 @@ struct SlideCanvas: View {
                 .simultaneousGesture(tapGestures(on: slide, scale: scale))
                 .accessibilityIdentifier("slideCanvas")
 
-            if !state.isDrawing, let shape = displayed.shapes.first(where: { $0.id == state.selectedShapeID }) {
-                selection(for: shape, scale: scale)
+            if !state.isDrawing {
+                let selected = displayed.shapes.filter { state.isSelected($0.id) }
+                if selected.count == 1, let shape = selected.first {
+                    selection(for: shape, scale: scale)
+                } else {
+                    ForEach(selected) { shape in
+                        outline(for: shape, scale: scale)
+                    }
+                }
             }
 
             if state.isDrawing {
@@ -87,12 +98,13 @@ struct SlideCanvas: View {
 
     /// The slide with the move, resize or turn in progress applied.
     private func preview(of slide: Slide) -> Slide {
-        guard let interaction, let index = slide.shapes.firstIndex(where: { $0.id == interaction.shapeID }) else {
-            return slide
-        }
+        guard let interaction else { return slide }
         var slide = slide
-        slide.shapes[index].frame = EMURect(points: interaction.frame)
-        slide.shapes[index].rotation = interaction.rotation
+        for index in slide.shapes.indices {
+            guard let placement = interaction.current[slide.shapes[index].id] else { continue }
+            slide.shapes[index].frame = EMURect(points: placement.frame)
+            slide.shapes[index].rotation = placement.rotation
+        }
         return slide
     }
 
@@ -119,9 +131,22 @@ struct SlideCanvas: View {
         }
         let singleTap = SpatialTapGesture().onEnded { value in
             let point = CGPoint(x: value.location.x / scale, y: value.location.y / scale)
-            state.selectedShapeID = shape(at: point, on: slide, scale: scale)?.id
+            let hit = shape(at: point, on: slide, scale: scale)
+            if state.isSelectingMultiple || Self.isShiftHeld {
+                if let hit { state.toggleSelection(hit.id) }
+            } else {
+                state.selectedShapeID = hit?.id
+            }
         }
         return doubleTap.exclusively(before: singleTap)
+    }
+
+    /// Whether a hardware keyboard's Shift key is down. SwiftUI's taps do
+    /// not report modifiers on iOS.
+    private static var isShiftHeld: Bool {
+        guard let keyboard = GCKeyboard.coalesced?.keyboardInput else { return false }
+        return keyboard.button(forKeyCode: .leftShift)?.isPressed == true
+            || keyboard.button(forKeyCode: .rightShift)?.isPressed == true
     }
 
     private func moveGesture(on slide: Slide, scale: CGFloat) -> some Gesture {
@@ -131,13 +156,22 @@ struct SlideCanvas: View {
                     let start = CGPoint(x: value.startLocation.x / scale, y: value.startLocation.y / scale)
                     guard let shape = shape(at: start, on: slide, scale: scale), shape.isEditable,
                           slide.canEditShapes else { return }
-                    state.selectedShapeID = shape.id
-                    interaction = Interaction(
-                        shapeID: shape.id, original: shape.frame.points, frame: shape.frame.points, rotation: shape.rotation
-                    )
+                    // Dragging one of the selection moves the whole selection.
+                    if !state.isSelected(shape.id) {
+                        if state.isSelectingMultiple {
+                            state.toggleSelection(shape.id)
+                        } else {
+                            state.selectedShapeID = shape.id
+                        }
+                    }
+                    interaction = Interaction(shapes: slide.shapes.filter { state.isSelected($0.id) && $0.isEditable })
                 }
                 guard var current = interaction else { return }
-                current.frame = current.original.offsetBy(dx: value.translation.width / scale, dy: value.translation.height / scale)
+                for (id, original) in current.originals {
+                    current.current[id]?.frame = original.frame.offsetBy(
+                        dx: value.translation.width / scale, dy: value.translation.height / scale
+                    )
+                }
                 interaction = current
             }
             .onEnded { value in
@@ -217,6 +251,18 @@ struct SlideCanvas: View {
         ))
     }
 
+    /// One of several selected shapes: its frame alone, without handles.
+    private func outline(for shape: SlideShape, scale: CGFloat) -> some View {
+        let frame = shape.frame.points
+        let rect = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale)
+        return Rectangle()
+            .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+            .frame(width: max(rect.width, 1), height: max(rect.height, 1))
+            .rotationEffect(.degrees(shape.rotation))
+            .offset(x: rect.minX, y: rect.minY)
+            .allowsHitTesting(false)
+    }
+
     /// Lines have no height or no width; their edge handles would sit on
     /// top of their corner handles.
     private func handles(for rect: CGRect) -> [Handle] {
@@ -232,7 +278,7 @@ struct SlideCanvas: View {
     private func resizeGesture(_ handle: Handle, shape: SlideShape, scale: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                let original = interaction?.original ?? shape.frame.points
+                let original = interaction?.originals[shape.id]?.frame ?? shape.frame.points
                 // The drag, turned into the shape's own unturned space.
                 let drag = Self.rotate(
                     CGPoint(x: value.translation.width / scale, y: value.translation.height / scale),
@@ -248,7 +294,9 @@ struct SlideCanvas: View {
                     x: original.midX + shift.x - local.width / 2, y: original.midY + shift.y - local.height / 2,
                     width: local.width, height: local.height
                 )
-                interaction = Interaction(shapeID: shape.id, original: original, frame: frame, rotation: shape.rotation)
+                var current = interaction ?? Interaction(shapes: [shape])
+                current.current[shape.id]?.frame = frame
+                interaction = current
             }
             .onEnded { _ in
                 if let interaction { commit(interaction) }
@@ -325,9 +373,8 @@ struct SlideCanvas: View {
                 var degrees = (angle + 360).truncatingRemainder(dividingBy: 360)
                 let nearest = (degrees / 15).rounded() * 15
                 if abs(degrees - nearest) < 4 { degrees = nearest.truncatingRemainder(dividingBy: 360) }
-                let frame = shape.frame.points
-                var current = interaction ?? Interaction(shapeID: shape.id, original: frame, frame: frame, rotation: shape.rotation)
-                current.rotation = degrees
+                var current = interaction ?? Interaction(shapes: [shape])
+                current.current[shape.id]?.rotation = degrees
                 interaction = current
             }
             .onEnded { _ in
@@ -340,9 +387,11 @@ struct SlideCanvas: View {
 
     private func commit(_ interaction: Interaction) {
         guard interaction.isChange else { return }
-        state.setTransform(
-            frame: interaction.frame, rotation: interaction.rotation, of: interaction.shapeID, in: &presentation
-        )
+        if interaction.current.count == 1, let (id, placement) = interaction.current.first {
+            state.setTransform(frame: placement.frame, rotation: placement.rotation, of: id, in: &presentation)
+        } else {
+            state.setFrames(interaction.current.mapValues(\.frame), in: &presentation)
+        }
     }
 
     private static let coordinateSpace = "slideCanvas"

@@ -25,7 +25,12 @@ enum EditorPanel: String, Identifiable, Hashable {
 @Observable
 final class EditorState {
     var selectedSlideID: Slide.ID?
-    var selectedShapeID: SlideShape.ID?
+    /// The shapes selected on the current slide, in the order they were
+    /// picked. The last is the one panels act on when only one can be.
+    var selectedShapeIDs: [SlideShape.ID] = []
+    /// Taps add shapes to the selection, or take them out, instead of
+    /// replacing it.
+    var isSelectingMultiple = false
     var presentedPanel: EditorPanel?
     /// Freehand drawing over the slide, which becomes a picture when done.
     var isDrawing = false
@@ -45,9 +50,43 @@ final class EditorState {
         return presentation.slides[min(selectedIndex(in: presentation), presentation.slides.count - 1)]
     }
 
+    /// The one selected shape, or the last picked of several.
+    var selectedShapeID: SlideShape.ID? {
+        get { selectedShapeIDs.last }
+        set {
+            selectedShapeIDs = newValue.map { [$0] } ?? []
+            if newValue == nil { isSelectingMultiple = false }
+        }
+    }
+
+    var hasMultipleSelection: Bool { selectedShapeIDs.count > 1 }
+
+    func isSelected(_ id: SlideShape.ID) -> Bool { selectedShapeIDs.contains(id) }
+
     func selectedShape(in presentation: Presentation) -> SlideShape? {
         guard let selectedShapeID else { return nil }
         return selectedSlide(in: presentation)?.shapes.first { $0.id == selectedShapeID }
+    }
+
+    /// Every selected shape, in the slide's stacking order.
+    func selectedShapes(in presentation: Presentation) -> [SlideShape] {
+        selectedSlide(in: presentation)?.shapes.filter { selectedShapeIDs.contains($0.id) } ?? []
+    }
+
+    /// Adds a shape to the selection, or takes it out if it is already in.
+    func toggleSelection(_ id: SlideShape.ID) {
+        if let index = selectedShapeIDs.firstIndex(of: id) {
+            selectedShapeIDs.remove(at: index)
+        } else {
+            selectedShapeIDs.append(id)
+        }
+        if presentedPanel == .text, hasMultipleSelection { presentedPanel = nil }
+    }
+
+    func selectAllShapes(in presentation: Presentation) {
+        selectedShapeIDs = selectedSlide(in: presentation)?.shapes.map(\.id) ?? []
+        isSelectingMultiple = selectedShapeIDs.count > 1
+        if presentedPanel == .text { presentedPanel = nil }
     }
 
     func selectSlide(_ id: Slide.ID?) {
@@ -63,9 +102,14 @@ final class EditorState {
         if presentation.index(of: selectedSlideID) == nil {
             selectedSlideID = presentation.slides.first?.id
         }
-        if selectedShapeID != nil, selectedShape(in: presentation) == nil {
-            selectedShapeID = nil
-            if presentedPanel == .text { presentedPanel = nil }
+        if !selectedShapeIDs.isEmpty {
+            let existing = Set(selectedSlide(in: presentation)?.shapes.map(\.id) ?? [])
+            let kept = selectedShapeIDs.filter(existing.contains)
+            if kept != selectedShapeIDs { selectedShapeIDs = kept }
+            if kept.isEmpty {
+                isSelectingMultiple = false
+                if presentedPanel == .text { presentedPanel = nil }
+            }
         }
     }
 
@@ -265,9 +309,10 @@ final class EditorState {
     }
 
     func deleteSelectedShape(in presentation: inout Presentation) {
-        guard let id = selectedShapeID else { return }
+        let ids = Set(selectedShapeIDs)
+        guard !ids.isEmpty else { return }
         updateSlide(in: &presentation) { slide in
-            slide.shapes.removeAll { $0.id == id }
+            slide.shapes.removeAll { ids.contains($0.id) }
             slide.hasRemovedShapes = true
         }
         selectedShapeID = nil
@@ -275,16 +320,22 @@ final class EditorState {
     }
 
     func duplicateSelectedShape(in presentation: inout Presentation) {
-        guard var shape = selectedShape(in: presentation), shape.isEditable,
-              let slide = selectedSlide(in: presentation) else { return }
-        shape = SlideShape(copying: shape)
-        shape.shapeID = slide.nextShapeID
-        // Offset a little, so the copy is visibly a copy.
-        shape.frame.x += 182_880
-        shape.frame.y += 182_880
-        shape.hasOwnFrame = true
-        shape.edits.formUnion([.transform, .identity])
-        insert(shape, in: &presentation)
+        let originals = selectedShapes(in: presentation).filter(\.isEditable)
+        guard !originals.isEmpty, var nextID = selectedSlide(in: presentation)?.nextShapeID else { return }
+        var copies: [SlideShape] = []
+        for original in originals {
+            var shape = SlideShape(copying: original)
+            shape.shapeID = nextID
+            nextID += 1
+            // Offset a little, so the copy is visibly a copy.
+            shape.frame.x += 182_880
+            shape.frame.y += 182_880
+            shape.hasOwnFrame = true
+            shape.edits.formUnion([.transform, .identity])
+            copies.append(shape)
+        }
+        updateSlide(in: &presentation) { $0.shapes.append(contentsOf: copies) }
+        selectedShapeIDs = copies.map(\.id)
     }
 
     enum Arrangement {
@@ -294,18 +345,95 @@ final class EditorState {
         case back
     }
 
+    /// Restacks the selection, keeping the selected shapes in the order
+    /// they were among themselves.
     func arrangeSelectedShape(_ arrangement: Arrangement, in presentation: inout Presentation) {
-        guard let id = selectedShapeID else { return }
+        let ids = Set(selectedShapeIDs)
+        guard !ids.isEmpty else { return }
         updateSlide(in: &presentation) { slide in
-            guard let index = slide.shapes.firstIndex(where: { $0.id == id }) else { return }
-            let shape = slide.shapes.remove(at: index)
-            let destination = switch arrangement {
-            case .front: slide.shapes.count
-            case .forward: min(index + 1, slide.shapes.count)
-            case .backward: max(index - 1, 0)
-            case .back: 0
+            switch arrangement {
+            case .front, .back:
+                let moving = slide.shapes.filter { ids.contains($0.id) }
+                slide.shapes.removeAll { ids.contains($0.id) }
+                slide.shapes.insert(contentsOf: moving, at: arrangement == .front ? slide.shapes.count : 0)
+            case .forward:
+                // From the top down, so a shape never jumps one just moved.
+                for index in slide.shapes.indices.reversed().dropFirst()
+                where ids.contains(slide.shapes[index].id) && !ids.contains(slide.shapes[index + 1].id) {
+                    slide.shapes.swapAt(index, index + 1)
+                }
+            case .backward:
+                for index in slide.shapes.indices.dropFirst()
+                where ids.contains(slide.shapes[index].id) && !ids.contains(slide.shapes[index - 1].id) {
+                    slide.shapes.swapAt(index, index - 1)
+                }
             }
-            slide.shapes.insert(shape, at: destination)
+        }
+    }
+
+    enum Alignment: CaseIterable {
+        case left
+        case center
+        case right
+        case top
+        case middle
+        case bottom
+    }
+
+    /// Lines the selected shapes up with one another, or a lone shape with
+    /// the slide.
+    func alignSelectedShapes(_ alignment: Alignment, in presentation: inout Presentation) {
+        let shapes = selectedShapes(in: presentation).filter(\.isEditable)
+        guard !shapes.isEmpty else { return }
+        let bounds = shapes.count == 1
+            ? CGRect(origin: .zero, size: presentation.slideSize.points)
+            : shapes.map(\.frame.points).reduce(CGRect.null) { $0.union($1) }
+        var frames: [SlideShape.ID: CGRect] = [:]
+        for shape in shapes {
+            var frame = shape.frame.points
+            switch alignment {
+            case .left: frame.origin.x = bounds.minX
+            case .center: frame.origin.x = bounds.midX - frame.width / 2
+            case .right: frame.origin.x = bounds.maxX - frame.width
+            case .top: frame.origin.y = bounds.minY
+            case .middle: frame.origin.y = bounds.midY - frame.height / 2
+            case .bottom: frame.origin.y = bounds.maxY - frame.height
+            }
+            frames[shape.id] = frame
+        }
+        setFrames(frames, in: &presentation)
+    }
+
+    /// Spaces three or more shapes evenly between the outermost two.
+    func distributeSelectedShapes(horizontally: Bool, in presentation: inout Presentation) {
+        let shapes = selectedShapes(in: presentation).filter(\.isEditable)
+            .sorted { horizontally ? $0.frame.x < $1.frame.x : $0.frame.y < $1.frame.y }
+        guard shapes.count > 2, let first = shapes.first?.frame.points, let last = shapes.last?.frame.points else { return }
+        let total = shapes.map { horizontally ? $0.frame.points.width : $0.frame.points.height }.reduce(0, +)
+        let span = horizontally ? last.maxX - first.minX : last.maxY - first.minY
+        let gap = (span - total) / CGFloat(shapes.count - 1)
+        var position = horizontally ? first.minX : first.minY
+        var frames: [SlideShape.ID: CGRect] = [:]
+        for shape in shapes {
+            var frame = shape.frame.points
+            if horizontally { frame.origin.x = position } else { frame.origin.y = position }
+            position += (horizontally ? frame.width : frame.height) + gap
+            frames[shape.id] = frame
+        }
+        setFrames(frames, in: &presentation)
+    }
+
+    /// Moves several shapes at once, as one change. Frames are in points.
+    func setFrames(_ frames: [SlideShape.ID: CGRect], in presentation: inout Presentation) {
+        updateSlide(in: &presentation) { slide in
+            for index in slide.shapes.indices {
+                guard let frame = frames[slide.shapes[index].id], slide.shapes[index].isEditable else { continue }
+                let rect = EMURect(points: frame)
+                guard rect != slide.shapes[index].frame else { continue }
+                slide.shapes[index].frame = rect
+                slide.shapes[index].hasOwnFrame = true
+                slide.shapes[index].edits.insert(.transform)
+            }
         }
     }
 
@@ -419,14 +547,36 @@ final class EditorState {
     // MARK: - Fill and outline
 
     func setFill(_ fill: Fill, in presentation: inout Presentation) {
-        updateShape(selectedShapeID, edits: [.fill], in: &presentation) { $0.fill = fill }
+        updateSelectedShapes(edits: [.fill], in: &presentation) { shape in
+            guard case .shape = shape.kind else { return }
+            shape.fill = fill
+        }
     }
 
     func setLine(_ change: (inout LineStyle) -> Void, in presentation: inout Presentation) {
-        updateShape(selectedShapeID, edits: [.line], in: &presentation) { shape in
+        updateSelectedShapes(edits: [.line], in: &presentation) { shape in
+            switch shape.kind {
+            case .shape, .connector, .picture: break
+            default: return
+            }
             var line = shape.line ?? LineStyle()
             change(&line)
             shape.line = line
+        }
+    }
+
+    /// Changes every selected shape that can be changed, as one change.
+    func updateSelectedShapes(
+        edits: Set<SlideShape.Edit>, in presentation: inout Presentation, _ change: (inout SlideShape) -> Void
+    ) {
+        let ids = Set(selectedShapeIDs)
+        guard !ids.isEmpty else { return }
+        updateSlide(in: &presentation) { slide in
+            for index in slide.shapes.indices where ids.contains(slide.shapes[index].id) && slide.shapes[index].isEditable {
+                let before = slide.shapes[index]
+                change(&slide.shapes[index])
+                if slide.shapes[index] != before { slide.shapes[index].edits.formUnion(edits) }
+            }
         }
     }
 }

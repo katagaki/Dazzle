@@ -326,10 +326,21 @@ struct DeckView: View {
                     state.duplicateSelectedShape(in: &document.presentation)
                     return .handled
                 }
+                if press.modifiers.contains(.command), press.characters.lowercased() == "a" {
+                    state.selectAllShapes(in: document.presentation)
+                    return .handled
+                }
                 return .ignored
             }
             guard shape.isEditable else { return .handled }
-            state.setFrame(shape.frame.points.offsetBy(dx: offset.width, dy: offset.height), of: shape.id, in: &document.presentation)
+            let frames = Dictionary(uniqueKeysWithValues: state.selectedShapes(in: document.presentation).map {
+                ($0.id, $0.frame.points.offsetBy(dx: offset.width, dy: offset.height))
+            })
+            state.setFrames(frames, in: &document.presentation)
+            return .handled
+        }
+        if press.modifiers.contains(.command), press.characters.lowercased() == "a" {
+            state.selectAllShapes(in: document.presentation)
             return .handled
         }
         switch press.key {

@@ -13,6 +13,7 @@ struct SlideNavigator: View {
 
     /// How far in from the strip's ends thumbnails fade and blur.
     private static let edgeFade: CGFloat = 64
+    private static let edgeBlurRadius: CGFloat = 6
     /// Where the first and last thumbnails rest: clear of the strip's buttons.
     private static let edgeInset: CGFloat = 60
 
@@ -46,12 +47,14 @@ struct SlideNavigator: View {
         }
     }
 
-    /// More blur the further a thumbnail has slid under either end of the strip.
-    nonisolated private static func edgeBlur(for proxy: GeometryProxy) -> CGFloat {
+    /// Blur that deepens point by point toward either end of the strip, so a
+    /// thumbnail only softens where it has slid under a button.
+    nonisolated private static func edgeBlur(for proxy: GeometryProxy) -> Shader {
         // The visible strip, in the thumbnail's own coordinates.
-        guard let visible = proxy.bounds(of: .scrollView) else { return 0 }
-        let under = max(visible.minX + edgeFade, proxy.size.width - (visible.maxX - edgeFade), 0)
-        return min(under / edgeFade, 1) * 6
+        let visible = proxy.bounds(of: .scrollView) ?? CGRect(origin: .zero, size: proxy.size)
+        return ShaderLibrary.edgeBlur(
+            .float(visible.minX), .float(visible.maxX), .float(edgeFade), .float(edgeBlurRadius)
+        )
     }
 
     @ViewBuilder
@@ -82,7 +85,7 @@ struct SlideNavigator: View {
             } else {
                 thumbnail.frame(height: 52)
                     .visualEffect { content, proxy in
-                        content.blur(radius: Self.edgeBlur(for: proxy))
+                        content.layerEffect(Self.edgeBlur(for: proxy), maxSampleOffset: CGSize(width: Self.edgeBlurRadius, height: Self.edgeBlurRadius))
                     }
             }
         }

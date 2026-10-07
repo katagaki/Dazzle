@@ -11,9 +11,10 @@ struct SlideNavigator: View {
 
     @State private var dropTargetID: Slide.ID?
 
-    /// How far in from the strip's ends thumbnails fade and blur.
-    private static let edgeFade: CGFloat = 64
-    private static let edgeBlurRadius: CGFloat = 6
+    /// How far in from the strip's ends thumbnails blur: no further than its
+    /// buttons reach, so as many thumbnails as fit stay sharp.
+    private static let edgeFade: CGFloat = 40
+    private static let edgeBlurRadius: CGFloat = 8
     /// Where the first and last thumbnails rest: clear of the strip's buttons.
     private static let edgeInset: CGFloat = 60
 

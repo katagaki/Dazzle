@@ -20,6 +20,9 @@ struct Presentation: Equatable, Sendable {
     /// Whether slides were added, removed or reordered, which means the
     /// slide list itself has to be written again.
     var isStructureModified = false
+    /// Everyone who has commented, in each of PowerPoint's two formats.
+    var commentAuthors: [CommentAuthor] = []
+    var modernCommentAuthors: [ModernCommentAuthor] = []
 
     var unsupportedFeatures: UnsupportedFeatureReport { package.unsupportedFeatures }
 
@@ -118,6 +121,11 @@ struct Slide: Identifiable, Equatable, Sendable {
     /// The speaker notes, as plain text.
     var notes = ""
     var notesPart: String?
+    /// The slide's comment threads, and the parts they were read from.
+    var comments: [SlideComment] = []
+    var legacyCommentsPart: String?
+    var modernCommentsPart: String?
+    var areCommentsModified = false
     /// Whether the slide's own XML must be written again.
     var isModified = false
     var isBackgroundModified = false

@@ -8,6 +8,7 @@ enum EditorPanel: String, Identifiable, Hashable {
     case export
     case find
     case chart
+    case comments
 
     var id: String { rawValue }
 
@@ -15,6 +16,7 @@ enum EditorPanel: String, Identifiable, Hashable {
         switch self {
         case .find: String(localized: "Panel.Find.Title")
         case .chart: String(localized: "Panel.Chart.Title")
+        case .comments: String(localized: "Panel.Comments.Title")
         case .text: String(localized: "Panel.Text.Title")
         case .format: String(localized: "Panel.Format.Title")
         case .notes: String(localized: "Panel.Notes.Title")
@@ -214,6 +216,74 @@ final class EditorState {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    // MARK: - Comments
+
+    /// Changes the selected slide's comments.
+    private func updateComments(in presentation: inout Presentation, _ change: (inout [SlideComment]) -> Void) {
+        let index = selectedIndex(in: presentation)
+        guard presentation.slides.indices.contains(index) else { return }
+        change(&presentation.slides[index].comments)
+        presentation.slides[index].areCommentsModified = true
+    }
+
+    /// Starts a thread on the slide being edited. It is written the way the
+    /// slide's other comments are, or if it has none, the way every app reads.
+    func addComment(_ text: String, author: String, at position: CGPoint? = nil, in presentation: inout Presentation) {
+        guard let slide = selectedSlide(in: presentation), !text.trimmed.isEmpty else { return }
+        let format: SlideComment.Format = slide.comments.contains { $0.format == .modern && $0.source != nil } ? .modern : .legacy
+        let place = position ?? CGPoint(x: 12 + CGFloat(slide.comments.count) * 18, y: 12)
+        let comment = SlideComment(
+            id: format == .modern ? CommentXML.newID() : UUID().uuidString, author: author,
+            initials: Self.initials(of: author), date: Date(), text: text.trimmed, position: place, format: format
+        )
+        updateComments(in: &presentation) { $0.append(comment) }
+    }
+
+    func reply(to threadID: String, with text: String, author: String, in presentation: inout Presentation) {
+        guard !text.trimmed.isEmpty else { return }
+        updateComments(in: &presentation) { comments in
+            guard let index = comments.firstIndex(where: { $0.id == threadID }) else { return }
+            comments[index].replies.append(SlideComment(
+                id: comments[index].format == .modern ? CommentXML.newID() : UUID().uuidString, author: author,
+                initials: Self.initials(of: author), date: Date(), text: text.trimmed, format: comments[index].format
+            ))
+        }
+    }
+
+    /// Deletes a thread, or with `replyID`, one reply in it.
+    func deleteComment(_ threadID: String, replyID: String? = nil, in presentation: inout Presentation) {
+        updateComments(in: &presentation) { comments in
+            guard let index = comments.firstIndex(where: { $0.id == threadID }) else { return }
+            if let replyID {
+                comments[index].replies.removeAll { $0.id == replyID }
+            } else {
+                comments.remove(at: index)
+            }
+        }
+    }
+
+    func setCommentResolved(_ threadID: String, _ isResolved: Bool, in presentation: inout Presentation) {
+        updateComments(in: &presentation) { comments in
+            guard let index = comments.firstIndex(where: { $0.id == threadID }) else { return }
+            comments[index].isResolved = isResolved
+        }
+    }
+
+    /// Moves a thread's pin on the slide. `position` is in points.
+    func moveComment(_ threadID: String, to position: CGPoint, in presentation: inout Presentation) {
+        updateComments(in: &presentation) { comments in
+            guard let index = comments.firstIndex(where: { $0.id == threadID }) else { return }
+            comments[index].position = position
+        }
+    }
+
+    /// "Ada Lovelace" → "AL".
+    static func initials(of name: String) -> String {
+        let words = name.split(whereSeparator: \.isWhitespace)
+        let letters = words.prefix(2).compactMap(\.first).map(String.init).joined()
+        return letters.isEmpty ? String(name.prefix(2)) : letters.uppercased()
     }
 
     func setBackground(_ fill: Fill?, in presentation: inout Presentation) {

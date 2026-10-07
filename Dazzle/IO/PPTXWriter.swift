@@ -32,6 +32,8 @@ private struct PackageBuilder {
     var slides: [Slide]
     /// Set when a notes master had to be made for new notes.
     var createdNotesMasterRelationship: String?
+    var commentAuthors: [CommentAuthor]
+    var modernCommentAuthors: [ModernCommentAuthor]
 
     init(presentation: Presentation) {
         self.presentation = presentation
@@ -39,6 +41,8 @@ private struct PackageBuilder {
         contentTypes = ContentTypes(data: parts["[Content_Types].xml"])
         mainRelationships = Relationship.parse(parts[PackagePath.relationships(of: presentation.package.mainPart)])
         slides = presentation.slides
+        commentAuthors = presentation.commentAuthors
+        modernCommentAuthors = presentation.modernCommentAuthors
     }
 
     private var mainPart: String { presentation.package.mainPart }
@@ -55,6 +59,9 @@ private struct PackageBuilder {
         removeDeletedSlides()
         for index in slides.indices {
             try writeSlide(at: index)
+        }
+        if slides.contains(where: \.areCommentsModified) {
+            writeCommentAuthors()
         }
         if presentation.isStructureModified || createdNotesMasterRelationship != nil {
             try writePresentationPart()
@@ -93,8 +100,10 @@ private struct PackageBuilder {
         for path in originalSlidePaths where !kept.contains(path) {
             let relationships = Relationship.parse(parts[PackagePath.relationships(of: path)])
             // A slide's notes belong to it alone and go with it.
-            for notes in relationships where notes.type == OOXML.RelationshipType.notesSlide {
-                removePart(PackagePath.resolve(notes.target, from: path))
+            for owned in relationships where [
+                OOXML.RelationshipType.notesSlide, OOXML.RelationshipType.comments, OOXML.RelationshipType.modernComments,
+            ].contains(owned.type) {
+                removePart(PackagePath.resolve(owned.target, from: path))
             }
             removePart(path)
             let mainPart = mainPart
@@ -129,6 +138,9 @@ private struct PackageBuilder {
 
         if slide.areNotesModified {
             try writeNotes(for: &slide, slidePath: path)
+        }
+        if slide.areCommentsModified {
+            writeComments(for: &slide, slidePath: path)
         }
 
         if slide.isModified || isNewPart {
@@ -182,6 +194,74 @@ private struct PackageBuilder {
         }
         guard let xml = XMLLite.serialize(root) else { throw PresentationWriteError.unwritablePart(path) }
         return Data((PackagePath.declaration + xml).utf8)
+    }
+
+    // MARK: - Comments
+
+    /// Writes a slide's comments into a part for each format it uses, and
+    /// removes a part whose comments are all gone.
+    private mutating func writeComments(for slide: inout Slide, slidePath: String) {
+        let legacy = slide.comments.filter { $0.format == .legacy }
+        let modern = slide.comments.filter { $0.format == .modern }
+        slide.legacyCommentsPart = writeCommentPart(
+            legacy.isEmpty ? nil : CommentXML.legacyXML(legacy, authors: &commentAuthors),
+            existing: slide.legacyCommentsPart, prefix: "ppt/comments/comment",
+            type: OOXML.RelationshipType.comments, contentType: CommentXML.legacyContentType,
+            slide: &slide, slidePath: slidePath
+        )
+        slide.modernCommentsPart = writeCommentPart(
+            modern.isEmpty ? nil : CommentXML.modernXML(modern, authors: &modernCommentAuthors),
+            existing: slide.modernCommentsPart, prefix: "ppt/comments/modernComment_",
+            type: OOXML.RelationshipType.modernComments, contentType: CommentXML.modernContentType,
+            slide: &slide, slidePath: slidePath
+        )
+    }
+
+    private mutating func writeCommentPart(
+        _ xml: String?, existing: String?, prefix: String, type: String, contentType: String,
+        slide: inout Slide, slidePath: String
+    ) -> String? {
+        guard let xml else {
+            if let existing {
+                removePart(existing)
+                slide.relationships.removeAll { $0.type == type && PackagePath.resolve($0.target, from: slidePath) == existing }
+            }
+            return nil
+        }
+        let path = existing ?? PackagePath.unused(prefix: prefix, suffix: ".xml", taken: Set(parts.keys))
+        parts[path] = Data((PackagePath.declaration + xml).utf8)
+        contentTypes.setOverride(contentType, for: path)
+        if !slide.relationships.contains(where: { $0.type == type && PackagePath.resolve($0.target, from: slidePath) == path }) {
+            slide.relationships.append(Relationship(
+                id: Relationship.unusedID(in: slide.relationships), type: type,
+                target: PackagePath.relativeTarget(to: path, from: slidePath)
+            ))
+        }
+        return path
+    }
+
+    /// The lists of who has commented, made or rewritten.
+    private mutating func writeCommentAuthors() {
+        func write(_ xml: String, type: String, contentType: String, name: String) {
+            let path = mainRelationships.first { $0.type == type }.map { PackagePath.resolve($0.target, from: mainPart) }
+                ?? name
+            parts[path] = Data((PackagePath.declaration + xml).utf8)
+            contentTypes.setOverride(contentType, for: path)
+            if !mainRelationships.contains(where: { $0.type == type }) {
+                mainRelationships.append(Relationship(
+                    id: Relationship.unusedID(in: mainRelationships), type: type,
+                    target: PackagePath.relativeTarget(to: path, from: mainPart)
+                ))
+            }
+        }
+        if !commentAuthors.isEmpty {
+            write(CommentXML.legacyAuthorsXML(commentAuthors), type: OOXML.RelationshipType.commentAuthors,
+                  contentType: CommentXML.legacyAuthorsContentType, name: "ppt/commentAuthors.xml")
+        }
+        if !modernCommentAuthors.isEmpty {
+            write(CommentXML.modernAuthorsXML(modernCommentAuthors), type: OOXML.RelationshipType.authors,
+                  contentType: CommentXML.modernAuthorsContentType, name: "ppt/authors.xml")
+        }
     }
 
     // MARK: - Notes

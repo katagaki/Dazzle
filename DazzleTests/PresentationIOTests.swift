@@ -981,3 +981,87 @@ struct ChartTests {
         #expect(png.starts(with: [0x89, 0x50, 0x4E, 0x47]))
     }
 }
+
+@Suite("Comments")
+@MainActor
+struct CommentTests {
+    private func reread(_ presentation: Presentation) throws -> Presentation {
+        try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+    }
+
+    @Test("New comments and their replies are written in the format every app reads")
+    func legacy() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.addComment("Is this the final figure?", author: "Ada Lovelace", at: CGPoint(x: 100, y: 50), in: &presentation)
+        let thread = try #require(presentation.slides[0].comments.first)
+        state.reply(to: thread.id, with: "Yes, signed off.", author: "Charles Babbage", in: &presentation)
+
+        let copy = try reread(presentation)
+        let read = try #require(copy.slides[0].comments.first)
+        #expect(copy.slides[0].comments.count == 1)
+        #expect(read.text == "Is this the final figure?")
+        #expect(read.author == "Ada Lovelace" && read.initials == "AL")
+        #expect(read.position == CGPoint(x: 100, y: 50))
+        #expect(read.replies.map(\.text) == ["Yes, signed off."])
+        #expect(read.replies.first?.author == "Charles Babbage")
+        #expect(copy.commentAuthors.count == 2)
+
+        // Deleting the thread takes the part away.
+        var edited = copy
+        let reopened = EditorState()
+        reopened.selectSlide(edited.slides[0].id)
+        reopened.deleteComment(read.id, in: &edited)
+        let final = try reread(edited)
+        #expect(final.slides[0].comments.isEmpty)
+        #expect(!final.package.parts.keys.contains { $0.hasPrefix("ppt/comments/") })
+    }
+
+    @Test("PowerPoint 365's threaded comments are read, replied to and resolved")
+    func modern() throws {
+        var parts = PresentationTemplate.parts()
+        let author = "{11111111-2222-3333-4444-555555555555}"
+        parts["ppt/authors.xml"] = Data("""
+            <p188:authorLst xmlns:p188="\(CommentXML.modernNamespace)"><p188:author id="\(author)" name="Grace Hopper" \
+            initials="GH" userId="grace" providerId="None"/></p188:authorLst>
+            """.utf8)
+        parts["ppt/comments/modernComment_1.xml"] = Data("""
+            <p188:cmLst xmlns:a="\(OOXML.drawingML)" xmlns:p188="\(CommentXML.modernNamespace)"><p188:cm id="{A}" \
+            authorId="\(author)" created="2025-01-02T03:04:05.000"><pc:sldMkLst \
+            xmlns:pc="http://schemas.microsoft.com/office/powerpoint/2013/main/command"><pc:docMk/><pc:sldMk cId="1" sldId="256"/>\
+            </pc:sldMkLst><p188:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Tighten this</a:t></a:r></a:p></p188:txBody>\
+            </p188:cm></p188:cmLst>
+            """.utf8)
+        let slideRels = "ppt/slides/_rels/slide1.xml.rels"
+        var relationships = Relationship.parse(parts[slideRels])
+        relationships.append(Relationship(id: "rId99", type: OOXML.RelationshipType.modernComments, target: "../comments/modernComment_1.xml"))
+        parts[slideRels] = Relationship.xml(relationships)
+        var main = Relationship.parse(parts["ppt/_rels/presentation.xml.rels"])
+        main.append(Relationship(id: "rId99", type: OOXML.RelationshipType.authors, target: "authors.xml"))
+        parts["ppt/_rels/presentation.xml.rels"] = Relationship.xml(main)
+
+        var presentation = try PPTXReader.presentation(fromParts: parts)
+        let thread = try #require(presentation.slides[0].comments.first)
+        #expect(thread.format == .modern)
+        #expect(thread.author == "Grace Hopper")
+        #expect(thread.text == "Tighten this")
+
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.reply(to: thread.id, with: "Done.", author: "Ada Lovelace", in: &presentation)
+        state.setCommentResolved(thread.id, true, in: &presentation)
+        state.addComment("Another", author: "Ada Lovelace", in: &presentation)
+
+        let copy = try reread(presentation)
+        #expect(copy.slides[0].comments.count == 2)
+        let read = try #require(copy.slides[0].comments.first)
+        #expect(read.isResolved)
+        #expect(read.replies.first?.text == "Done.")
+        #expect(read.replies.first?.author == "Ada Lovelace")
+        #expect(copy.slides[0].comments.allSatisfy { $0.format == .modern })
+        // The new comment is anchored to the slide as the old one is.
+        let written = String(decoding: try #require(copy.data(at: "ppt/comments/modernComment_1.xml")), as: UTF8.self)
+        #expect(written.components(separatedBy: "sldMkLst").count - 1 == 4)
+    }
+}

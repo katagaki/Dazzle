@@ -65,18 +65,34 @@ enum PPTXReader {
             )
         )
 
+        func part(of type: String) -> Data? {
+            mainRelationships.first { $0.type == type }.flatMap { parts[PackagePath.resolve($0.target, from: mainPart)] }
+        }
+        let authors = CommentXML.authors(part(of: OOXML.RelationshipType.commentAuthors))
+        let modernAuthors = CommentXML.modernAuthors(part(of: OOXML.RelationshipType.authors))
+
         // Slides, in the order the presentation lists them.
         var slides: [Slide] = []
         for entry in main.firstChild(named: "sldIdLst")?.children(named: "sldId") ?? [] {
             guard let path = target(entry.relationshipID), parts[path] != nil else { continue }
             guard var slide = readSlide(path, resources: resources, parts: parts, features: &features) else { continue }
+            for relationship in slide.relationships where !relationship.isExternal {
+                let commentsPath = PackagePath.resolve(relationship.target, from: path)
+                if relationship.type == OOXML.RelationshipType.comments {
+                    slide.legacyCommentsPart = commentsPath
+                    slide.comments += CommentXML.legacyComments(parts[commentsPath], authors: authors)
+                } else if relationship.type == OOXML.RelationshipType.modernComments {
+                    slide.modernCommentsPart = commentsPath
+                    slide.comments += CommentXML.modernComments(parts[commentsPath], authors: modernAuthors)
+                }
+            }
             slide.partName = path
             slide.sourcePart = path
             slides.append(slide)
         }
 
         let size = main.firstChild(named: "sldSz")
-        return Presentation(
+        var presentation = Presentation(
             slideSize: EMUSize(
                 width: size?.attribute("cx").flatMap(Int.init) ?? EMUSize.widescreen.width,
                 height: size?.attribute("cy").flatMap(Int.init) ?? EMUSize.widescreen.height
@@ -88,6 +104,9 @@ enum PPTXReader {
                 unsupportedFeatures: UnsupportedFeatureReport(features: features)
             )
         )
+        presentation.commentAuthors = authors
+        presentation.modernCommentAuthors = modernAuthors
+        return presentation
     }
 
     // MARK: - Masters and layouts

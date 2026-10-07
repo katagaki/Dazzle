@@ -91,6 +91,10 @@ struct SlideCanvas: View {
             guideLines(scale: scale, size: size)
 
             if !state.isDrawing {
+                commentPins(on: slide, scale: scale)
+            }
+
+            if !state.isDrawing {
                 let selected = displayed.shapes.filter { state.isSelected($0.id) }
                 if selected.count == 1, let shape = selected.first, shape.id == state.croppingShapeID,
                    case .picture(let picture) = shape.kind {
@@ -134,6 +138,39 @@ struct SlideCanvas: View {
             options.editingCell = TableEditingCell(shapeID: id, position: position)
         }
         return options
+    }
+
+    // MARK: - Comments
+
+    /// A pin for each comment thread where it was left on the slide, which
+    /// opens the comments; dragged, it moves.
+    private func commentPins(on slide: Slide, scale: CGFloat) -> some View {
+        ForEach(slide.comments.filter { $0.position != nil && !$0.isResolved }) { thread in
+            let point = thread.position ?? .zero
+            CommentBadge(initials: thread.initials, name: thread.author)
+                .overlay(alignment: .topTrailing) {
+                    if !thread.replies.isEmpty {
+                        Text(String(thread.replies.count + 1))
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(3)
+                            .background(.black.opacity(0.7), in: .circle)
+                            .offset(x: 6, y: -6)
+                    }
+                }
+                .shadow(radius: 2)
+                .offset(x: point.x * scale, y: point.y * scale)
+                .onTapGesture { state.presentedPanel = .comments }
+                .gesture(DragGesture(minimumDistance: 8).onEnded { value in
+                    let moved = CGPoint(
+                        x: min(max(point.x + value.translation.width / scale, 0), presentation.slideSize.points.width),
+                        y: min(max(point.y + value.translation.height / scale, 0), presentation.slideSize.points.height)
+                    )
+                    state.moveComment(thread.id, to: moved, in: &presentation)
+                })
+                .accessibilityLabel(String(format: String(localized: "Comments.Pin"), thread.author, thread.text))
+                .accessibilityAddTraits(.isButton)
+        }
     }
 
     // MARK: - Cropping

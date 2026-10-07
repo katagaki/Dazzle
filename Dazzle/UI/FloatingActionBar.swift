@@ -81,6 +81,11 @@ struct FloatingActionBar: View {
             editMenu
             panelAction("note.text", label: "ActionBar.Notes", panel: .notes)
                 .accessibilityIdentifier("notes")
+            panelAction(
+                (state.selectedSlide(in: presentation)?.comments.isEmpty ?? true) ? "text.bubble" : "text.bubble.fill",
+                label: "ActionBar.Comments", panel: .comments
+            )
+            .accessibilityIdentifier("comments")
             panelAction("paintpalette", label: "ActionBar.Format", panel: .format)
                 .accessibilityIdentifier("format")
         }

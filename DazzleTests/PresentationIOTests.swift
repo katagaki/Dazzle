@@ -728,3 +728,40 @@ struct PictureEditingTests {
         #expect(final.data(at: replaced.imagePath ?? "") == png)
     }
 }
+
+@Suite("Fills")
+@MainActor
+struct FillTests {
+    @Test("Picture and gradient fills are written for shapes and backgrounds")
+    func pictureAndGradient() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        let png = try #require(SlideExporter.image(of: presentation.slides[0], in: presentation, width: 16, format: .png))
+        state.insertShape("rect", in: &presentation)
+        state.setFillPicture(PreparedMedia(png: png, size: CGSize(width: 16, height: 9)), tiled: true, in: &presentation)
+        let gradient = Fill.Gradient(
+            stops: [.init(position: 0, color: .rgb(0xFF0000)), .init(position: 1, color: .rgb(0x0000FF))], angle: 45, isRadial: false
+        )
+        state.setBackground(.gradient(gradient), in: &presentation)
+
+        let copy = try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+        guard case .tiledPicture(let path, _)? = copy.slides[0].shapes.last?.fill else {
+            Issue.record("Expected a tiled picture fill")
+            return
+        }
+        #expect(copy.data(at: path) == png)
+        #expect(copy.slides[0].background == .fill(.gradient(gradient)))
+
+        var withPicture = copy
+        let reopened = EditorState()
+        reopened.selectSlide(withPicture.slides[0].id)
+        reopened.setBackgroundPicture(PreparedMedia(png: png, size: CGSize(width: 16, height: 9)), tiled: false, in: &withPicture)
+        let final = try PPTXReader.presentation(from: PPTXWriter.data(from: withPicture))
+        guard case .fill(.picture(let backgroundPath, _))? = final.slides[0].background else {
+            Issue.record("Expected a picture background")
+            return
+        }
+        #expect(final.data(at: backgroundPath) == png)
+    }
+}

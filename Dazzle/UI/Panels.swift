@@ -212,13 +212,11 @@ struct FormatPanel: View {
     private func shapeSections(_ shape: SlideShape) -> some View {
         if !shape.isPicture, case .shape = shape.kind, !PresetGeometry.isOpen(shape.geometry.presetName ?? "") {
             Section("Format.Section.Fill") {
-                ColorSwatches(
-                    identifier: "fillColor", choices: themeChoices + ColorChoice.system,
-                    selected: { if case .solid(let color) = shape.fill { return color } else { return nil } }(),
-                    allowsNone: true, isNoneSelected: shape.fill == Fill.none
-                ) { color in
-                    state.setFill(color.map(Fill.solid) ?? .none, in: &presentation)
-                }
+                FillEditor(
+                    identifier: "fillColor", fill: shape.fill, choices: themeChoices + ColorChoice.system,
+                    onChange: { state.setFill($0 ?? .none, in: &presentation) },
+                    onPicture: { state.setFillPicture($0, tiled: $1, in: &presentation) }
+                )
             }
         }
         if case .table(let table) = shape.kind {
@@ -372,13 +370,13 @@ struct FormatPanel: View {
     private var slideSections: some View {
         if let slide {
             Section {
-                ColorSwatches(
-                    identifier: "background", choices: themeChoices + ColorChoice.system,
-                    selected: { if case .fill(.solid(let color)) = slide.background { return color } else { return nil } }(),
-                    allowsNone: true, isNoneSelected: slide.background == nil
-                ) { color in
-                    state.setBackground(color.map(Fill.solid), in: &presentation)
-                }
+                FillEditor(
+                    identifier: "background",
+                    fill: { if case .fill(let fill) = slide.background { return fill } else { return nil } }(),
+                    choices: themeChoices + ColorChoice.system, noneIsAutomatic: true,
+                    onChange: { state.setBackground($0, in: &presentation) },
+                    onPicture: { state.setBackgroundPicture($0, tiled: $1, in: &presentation) }
+                )
             } header: {
                 Text("Format.Section.Background")
             } footer: {

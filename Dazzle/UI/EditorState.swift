@@ -928,6 +928,23 @@ final class EditorState {
         }
     }
 
+    /// Fills the selected shapes with a picture, added to the package.
+    func setFillPicture(_ media: PreparedMedia, tiled: Bool, in presentation: inout Presentation) {
+        let path = addMedia(media, to: &presentation)
+        setFill(tiled ? .tiledPicture(path: path) : .picture(path: path), in: &presentation)
+    }
+
+    func setBackgroundPicture(_ media: PreparedMedia, tiled: Bool, in presentation: inout Presentation) {
+        let path = addMedia(media, to: &presentation)
+        setBackground(tiled ? .tiledPicture(path: path) : .picture(path: path), in: &presentation)
+    }
+
+    private func addMedia(_ media: PreparedMedia, to presentation: inout Presentation) -> String {
+        let path = PackagePath.unused(prefix: "ppt/media/image", suffix: "." + media.fileExtension, taken: presentation.partNames)
+        presentation.addedParts[path] = media.data
+        return path
+    }
+
     func setLine(_ change: (inout LineStyle) -> Void, in presentation: inout Presentation) {
         updateSelectedShapes(edits: [.line], in: &presentation) { shape in
             switch shape.kind {

@@ -165,18 +165,17 @@ private struct PackageBuilder {
             }
             tree.insertChild(element, at: tree.children.count)
         }
-        slide.relationships = writer.relationships
-
         root.setAttribute("show", slide.isHidden ? "0" : nil)
         if slide.isBackgroundModified {
             if let existing = common.firstChild(named: "bg") { common.removeChild(existing) }
             if case .fill(let fill) = slide.background,
                let background = XMLLite.fragment(
-                "<p:bg><p:bgPr>\(fill.xml)<a:effectLst/></p:bgPr></p:bg>", namespaces: OOXML.namespaces
+                "<p:bg><p:bgPr>\(writer.fillXML(fill))<a:effectLst/></p:bgPr></p:bg>", namespaces: writer.fragmentNamespaces
                ) {
                 common.insertChild(background, at: 0)
             }
         }
+        slide.relationships = writer.relationships
         if slide.hasRemovedShapes, let timing = root.firstChild(named: "timing") {
             // Animations name shapes by id; with one gone they point at nothing.
             root.removeChild(timing)

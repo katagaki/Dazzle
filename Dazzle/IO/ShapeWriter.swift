@@ -51,7 +51,7 @@ struct ShapeWriter {
         return XMLLite.serialize(element, inheritedNamespaces: namespaces)
     }
 
-    private var fragmentNamespaces: [String: String] {
+    var fragmentNamespaces: [String: String] {
         OOXML.namespaces.merging(namespaces.filter { !$0.key.isEmpty }) { _, inScope in inScope }
     }
 
@@ -205,8 +205,28 @@ struct ShapeWriter {
         renumber(element)
     }
 
-    private func writeFill(_ fill: Fill, into element: XMLElement) {
-        guard let properties = properties(of: element), let new = fragment(fill.xml) else { return }
+    /// A fill as DrawingML, a picture fill naming its image by a
+    /// relationship of the slide's, added if the slide has none to it.
+    mutating func fillXML(_ fill: Fill) -> String {
+        switch fill {
+        case .picture(let path, let effects), .tiledPicture(let path, let effects):
+            let reference = relationshipID(forImage: path)
+            let alpha = effects.opacity < 1 ? "<a:alphaModFix amt=\"\(Int((effects.opacity * 100_000).rounded()))\"/>" : ""
+            let grey = effects.isGreyscale ? "<a:grayscl/>" : ""
+            let layout = if case .tiledPicture = fill {
+                "<a:tile tx=\"0\" ty=\"0\" sx=\"100000\" sy=\"100000\" flip=\"none\" algn=\"tl\"/>"
+            } else {
+                "<a:stretch><a:fillRect/></a:stretch>"
+            }
+            return "<a:blipFill dpi=\"0\" rotWithShape=\"1\"><a:blip r:embed=\"\(reference)\">\(alpha)\(grey)</a:blip>"
+                + "<a:srcRect/>\(layout)</a:blipFill>"
+        default:
+            return fill.xml
+        }
+    }
+
+    private mutating func writeFill(_ fill: Fill, into element: XMLElement) {
+        guard let properties = properties(of: element), let new = fragment(fillXML(fill)) else { return }
         for child in properties.children where Fill.elementNames.contains(child.name) {
             properties.removeChild(child)
         }

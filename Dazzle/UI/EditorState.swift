@@ -39,6 +39,8 @@ final class EditorState {
     var selectedCell: TableCellPosition?
     /// Whether the picked cell's text is being typed into.
     var isEditingCell = false
+    /// The picture whose crop is being adjusted.
+    var croppingShapeID: SlideShape.ID?
     var presentedPanel: EditorPanel?
     /// Freehand drawing over the slide, which becomes a picture when done.
     var isDrawing = false
@@ -65,6 +67,7 @@ final class EditorState {
             if newValue != selectedShapeIDs.last {
                 selectedCell = nil
                 isEditingCell = false
+                croppingShapeID = nil
             }
             selectedShapeIDs = newValue.map { [$0] } ?? []
             if newValue == nil { isSelectingMultiple = false }
@@ -419,6 +422,55 @@ final class EditorState {
             frames[shape.id] = frame
         }
         setFrames(frames, in: &presentation)
+    }
+
+    // MARK: - Pictures
+
+    /// Cuts the picture to `frame`, a part of the whole image the crop
+    /// fractions describe. `frame` is in points.
+    func setCrop(
+        frame: CGRect, left: Double, top: Double, right: Double, bottom: Double, of id: SlideShape.ID,
+        in presentation: inout Presentation
+    ) {
+        updateShape(id, edits: [.picture, .transform], in: &presentation) { shape in
+            guard case .picture(var picture) = shape.kind else { return }
+            picture.cropLeft = left
+            picture.cropTop = top
+            picture.cropRight = right
+            picture.cropBottom = bottom
+            shape.kind = .picture(picture)
+            shape.frame = EMURect(points: frame)
+            shape.hasOwnFrame = true
+        }
+    }
+
+    /// Shows the whole image again, at the size the visible part was shown.
+    func resetCrop(in presentation: inout Presentation) {
+        guard let shape = selectedShape(in: presentation), case .picture(let picture) = shape.kind else { return }
+        let image = SlideShape.Picture.imageRect(frame: shape.frame.points, picture: picture)
+        setCrop(frame: image, left: 0, top: 0, right: 0, bottom: 0, of: shape.id, in: &presentation)
+    }
+
+    /// Puts another image in the selected picture: as wide as the old one,
+    /// centred where it was, as tall as the new image's proportions make it.
+    func replacePicture(with media: PreparedMedia, in presentation: inout Presentation) {
+        guard let shape = selectedShape(in: presentation), case .picture = shape.kind else { return }
+        let path = PackagePath.unused(prefix: "ppt/media/image", suffix: "." + media.fileExtension, taken: presentation.partNames)
+        presentation.addedParts[path] = media.data
+        croppingShapeID = nil
+        updateShape(shape.id, edits: [.picture, .transform], in: &presentation) { shape in
+            let old = shape.frame.points
+            let height = media.size.width > 0 ? old.width * media.size.height / media.size.width : old.height
+            shape.frame = EMURect(points: CGRect(x: old.minX, y: old.midY - height / 2, width: old.width, height: height))
+            shape.hasOwnFrame = true
+            shape.kind = .picture(SlideShape.Picture(imagePath: path))
+        }
+    }
+
+    func setAltText(_ text: String, in presentation: inout Presentation) {
+        updateShape(selectedShapeID, edits: [.altText], in: &presentation) { shape in
+            shape.altText = text.nilIfEmpty
+        }
     }
 
     // MARK: - Tables
@@ -977,6 +1029,7 @@ extension SlideShape {
         copy.text = shape.text
         copy.textFrame = shape.textFrame
         copy.isTextBox = shape.isTextBox
+        copy.altText = shape.altText
         copy.isLocked = shape.isLocked
         copy.source = shape.source
         copy.edits = shape.edits

@@ -40,6 +40,16 @@ struct SlideCanvas: View {
         var isChange: Bool { current != originals }
     }
 
+    /// A crop being adjusted: the visible part's frame, in points, and the
+    /// fractions of the whole image cut from each edge.
+    @State private var cropDraft: CropDraft?
+
+    private struct CropDraft: Equatable {
+        var shapeID: SlideShape.ID
+        var frame: CGRect
+        var picture: SlideShape.Picture
+    }
+
     /// The lines a moved or resized shape has settled on.
     @State private var guides: [Snapping.Guide] = []
 
@@ -82,7 +92,10 @@ struct SlideCanvas: View {
 
             if !state.isDrawing {
                 let selected = displayed.shapes.filter { state.isSelected($0.id) }
-                if selected.count == 1, let shape = selected.first {
+                if selected.count == 1, let shape = selected.first, shape.id == state.croppingShapeID,
+                   case .picture(let picture) = shape.kind {
+                    cropOverlay(for: shape, picture: picture, scale: scale)
+                } else if selected.count == 1, let shape = selected.first {
                     selection(for: shape, scale: scale)
                 } else {
                     ForEach(selected) { shape in
@@ -121,6 +134,81 @@ struct SlideCanvas: View {
             options.editingCell = TableEditingCell(shapeID: id, position: position)
         }
         return options
+    }
+
+    // MARK: - Cropping
+
+    /// The whole image, faded, round the part the crop keeps, with handles
+    /// on the kept part's edges to cut more or less of it away.
+    private func cropOverlay(for shape: SlideShape, picture: SlideShape.Picture, scale: CGFloat) -> some View {
+        let frame = shape.frame.points
+        let image = SlideShape.Picture.imageRect(frame: frame, picture: picture)
+        let rect = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale)
+        return ZStack(alignment: .topLeading) {
+            if let path = picture.imagePath, let data = presentation.data(at: path),
+               let cgImage = ImageCache.shared.image(for: data, path: path) {
+                Image(decorative: cgImage, scale: 1)
+                    .resizable()
+                    .opacity(0.35)
+                    .frame(width: image.width * scale, height: image.height * scale)
+                    .offset(x: image.minX * scale, y: image.minY * scale)
+                    .allowsHitTesting(false)
+            }
+            Rectangle()
+                .strokeBorder(Color.accentColor, lineWidth: 2)
+                .frame(width: max(rect.width, 1), height: max(rect.height, 1))
+                .offset(x: rect.minX, y: rect.minY)
+                .allowsHitTesting(false)
+            ForEach(Handle.allCases) { handle in
+                let point = position(of: handle, in: rect)
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Color.accentColor)
+                    .frame(width: handle.unit.x == 0 ? 18 : 5, height: handle.unit.y == 0 ? 18 : 5)
+                    .frame(width: 12, height: 12)
+                    .padding(10)
+                    .contentShape(.rect)
+                    .offset(x: point.x - 16, y: point.y - 16)
+                    .gesture(cropGesture(handle, shape: shape, picture: picture, scale: scale))
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    /// Moves the kept part's edges, never past the edges of the image.
+    private func cropGesture(_ handle: Handle, shape: SlideShape, picture: SlideShape.Picture, scale: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let original = shape.frame.points
+                let image = SlideShape.Picture.imageRect(frame: original, picture: picture)
+                let dx = value.translation.width / scale
+                let dy = value.translation.height / scale
+                var minX = original.minX
+                var maxX = original.maxX
+                var minY = original.minY
+                var maxY = original.maxY
+                if handle.unit.x < 0 { minX = min(max(minX + dx, image.minX), maxX - 4) }
+                if handle.unit.x > 0 { maxX = max(min(maxX + dx, image.maxX), minX + 4) }
+                if handle.unit.y < 0 { minY = min(max(minY + dy, image.minY), maxY - 4) }
+                if handle.unit.y > 0 { maxY = max(min(maxY + dy, image.maxY), minY + 4) }
+                var cropped = picture
+                cropped.cropLeft = (minX - image.minX) / image.width
+                cropped.cropRight = (image.maxX - maxX) / image.width
+                cropped.cropTop = (minY - image.minY) / image.height
+                cropped.cropBottom = (image.maxY - maxY) / image.height
+                cropDraft = CropDraft(
+                    shapeID: shape.id, frame: CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY), picture: cropped
+                )
+            }
+            .onEnded { _ in
+                if let cropDraft, cropDraft.picture != picture {
+                    let crop = cropDraft.picture
+                    state.setCrop(
+                        frame: cropDraft.frame, left: crop.cropLeft, top: crop.cropTop, right: crop.cropRight,
+                        bottom: crop.cropBottom, of: shape.id, in: &presentation
+                    )
+                }
+                cropDraft = nil
+            }
     }
 
     // MARK: - Tables
@@ -216,8 +304,12 @@ struct SlideCanvas: View {
 
     /// The slide with the move, resize or turn in progress applied.
     private func preview(of slide: Slide) -> Slide {
-        guard let interaction else { return slide }
         var slide = slide
+        if let cropDraft, let index = slide.shapes.firstIndex(where: { $0.id == cropDraft.shapeID }) {
+            slide.shapes[index].frame = EMURect(points: cropDraft.frame)
+            slide.shapes[index].kind = .picture(cropDraft.picture)
+        }
+        guard let interaction else { return slide }
         for index in slide.shapes.indices {
             guard let placement = interaction.current[slide.shapes[index].id] else { continue }
             slide.shapes[index].frame = EMURect(points: placement.frame)

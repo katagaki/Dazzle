@@ -17,7 +17,8 @@ struct ShapeWriter {
     mutating func xml(for shape: SlideShape) -> String? {
         if shape.edits.isEmpty, let source = shape.source { return source }
         guard let element = element(for: shape) else { return shape.source }
-        let edits: Set<SlideShape.Edit> = shape.source == nil ? [.transform, .fill, .line, .text, .table] : shape.edits
+        let edits: Set<SlideShape.Edit> = shape.source == nil
+            ? [.transform, .fill, .line, .text, .table, .picture, .altText] : shape.edits
         if edits.contains(.transform), shape.hasOwnFrame || shape.source != nil {
             writeTransform(of: shape, into: element)
         }
@@ -32,6 +33,13 @@ struct ShapeWriter {
         }
         if edits.contains(.table), case .table(let table) = shape.kind {
             writeTable(table, into: element)
+        }
+        if edits.contains(.picture), case .picture(let picture) = shape.kind {
+            writePicture(picture, into: element)
+        }
+        if edits.contains(.altText) {
+            let common = element.children.first { $0.name.hasPrefix("nv") }?.firstChild(named: "cNvPr")
+            common?.setAttribute("descr", shape.altText?.nilIfEmpty)
         }
         if edits.contains(.identity), shape.source != nil {
             writeIdentity(of: shape, into: element)
@@ -248,6 +256,23 @@ struct ShapeWriter {
                 body.insertChild(element, at: body.children.count)
             }
         }
+    }
+
+    // MARK: - Pictures
+
+    /// Points the picture at its image, and cuts it as its crop says.
+    private mutating func writePicture(_ picture: SlideShape.Picture, into element: XMLElement) {
+        guard let fill = element.firstChild(named: "blipFill") else { return }
+        if let path = picture.imagePath, let blip = fill.firstChild(named: "blip") {
+            blip.setAttribute("embed", relationshipID(forImage: path))
+        }
+        fill.firstChild(named: "srcRect").map(fill.removeChild)
+        let edges = [("l", picture.cropLeft), ("t", picture.cropTop), ("r", picture.cropRight), ("b", picture.cropBottom)]
+            .filter { $0.1 != 0 }
+            .map { " \($0.0)=\"\(Int(($0.1 * 100_000).rounded()))\"" }
+        guard !edges.isEmpty, let crop = fragment("<a:srcRect\(edges.joined())/>") else { return }
+        let after = fill.children.firstIndex { $0.name == "blip" }
+        fill.insertChild(crop, at: (after ?? -1) + 1)
     }
 
     // MARK: - Tables

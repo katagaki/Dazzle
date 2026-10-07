@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 /// How the selected shape's text looks: all of it, or while typing, the
@@ -189,6 +190,8 @@ struct FormatPanel: View {
     @Binding var presentation: Presentation
     @Bindable var state: EditorState
 
+    @State private var replacement: PhotosPickerItem?
+
     private var slide: Slide? { state.selectedSlide(in: presentation) }
     private var shape: SlideShape? { state.selectedShape(in: presentation) }
     private var themeChoices: [ColorChoice] {
@@ -221,6 +224,9 @@ struct FormatPanel: View {
         if case .table(let table) = shape.kind {
             tableSections(table)
         }
+        if case .picture(let picture) = shape.kind, !state.hasMultipleSelection {
+            pictureSection(shape, picture: picture)
+        }
         if case .shape = shape.kind {
             outlineSection(shape)
         } else if case .connector = shape.kind {
@@ -238,6 +244,9 @@ struct FormatPanel: View {
         }
         AlignButtons(presentation: $presentation, state: state)
         GroupButtons(presentation: $presentation, state: state)
+        if !state.hasMultipleSelection {
+            descriptionSection(shape)
+        }
         if shape.canRotate, !state.hasMultipleSelection {
             Section("Format.Section.Rotate") {
                 LabeledContent("Format.Rotation") {
@@ -258,6 +267,53 @@ struct FormatPanel: View {
                 }
                 RotateAndFlipButtons(presentation: $presentation, state: state)
             }
+        }
+    }
+
+    private func pictureSection(_ shape: SlideShape, picture: SlideShape.Picture) -> some View {
+        Section("Format.Section.Picture") {
+            PhotosPicker(selection: $replacement, matching: .images) {
+                Label("Picture.Replace", systemImage: "photo.badge.arrow.down")
+            }
+            .accessibilityIdentifier("replacePicture")
+            .onChange(of: replacement) { _, item in
+                guard let item else { return }
+                replacement = nil
+                Task {
+                    guard let data = try? await item.loadTransferable(type: Data.self),
+                          let media = await Task.detached(operation: { PreparedMedia(data: data) }).value else {
+                        state.errorMessage = String(localized: "Error.UnreadablePicture")
+                        return
+                    }
+                    state.replacePicture(with: media, in: &presentation)
+                }
+            }
+            if shape.rotation == 0 {
+                Button(state.croppingShapeID == shape.id ? "Picture.DoneCropping" : "Picture.Crop", systemImage: "crop") {
+                    state.croppingShapeID = state.croppingShapeID == shape.id ? nil : shape.id
+                    if state.croppingShapeID != nil { state.presentedPanel = nil }
+                }
+            }
+            Button("Picture.ResetCrop", systemImage: "arrow.counterclockwise") {
+                state.resetCrop(in: &presentation)
+            }
+            .disabled(picture.cropLeft == 0 && picture.cropTop == 0 && picture.cropRight == 0 && picture.cropBottom == 0)
+        }
+    }
+
+    /// What a screen reader says in place of the shape.
+    private func descriptionSection(_ shape: SlideShape) -> some View {
+        Section {
+            TextField("Format.AltText.Placeholder", text: Binding(
+                get: { shape.altText ?? "" },
+                set: { state.setAltText($0, in: &presentation) }
+            ), axis: .vertical)
+            .lineLimit(1...4)
+            .accessibilityIdentifier("altText")
+        } header: {
+            Text("Format.Section.AltText")
+        } footer: {
+            Text("Format.AltText.Footer")
         }
     }
 

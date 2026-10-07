@@ -46,6 +46,7 @@ final class ShapeParser {
         guard let tree else { return [] }
         return tree.children.compactMap { element in
             guard var shape = shape(from: element) else { return nil }
+            shape.altText = Self.description(of: element)
             if capturesSource {
                 if let source = XMLLite.serialize(element, inheritedNamespaces: namespaces) {
                     shape.source = source
@@ -84,6 +85,14 @@ final class ShapeParser {
     }
 
     // MARK: - Shapes
+
+    /// A shape's `descr`, looking inside an alternative's rendition if need be.
+    private static func description(of element: XMLElement) -> String? {
+        let shape = element.name == "AlternateContent"
+            ? (element.firstChild(named: "Fallback") ?? element.firstChild(named: "Choice"))?.children.first
+            : element
+        return shape?.children.first { $0.name.hasPrefix("nv") }?.firstChild(named: "cNvPr")?.attribute("descr")?.nilIfEmpty
+    }
 
     private func nonVisualProperties(_ element: XMLElement) -> (id: Int, name: String, nv: XMLElement?) {
         let nonVisual = element.children.first { $0.name.hasPrefix("nv") }

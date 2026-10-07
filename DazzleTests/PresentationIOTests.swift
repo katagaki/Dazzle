@@ -689,3 +689,42 @@ struct TableEditingTests {
         #expect(table.rows[0].cells[1].fill == .solid(.rgb(0xFF0000)))
     }
 }
+
+@Suite("Pictures")
+@MainActor
+struct PictureEditingTests {
+    @Test("Crops, replaced images and descriptions are written and read back")
+    func cropReplaceDescribe() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        let png = try #require(SlideExporter.image(of: presentation.slides[0], in: presentation, width: 40, format: .png))
+        state.insertPicture(PreparedMedia(png: png, size: CGSize(width: 40, height: 20)), in: &presentation)
+        let id = try #require(state.selectedShapeID)
+        state.setCrop(frame: CGRect(x: 10, y: 10, width: 20, height: 20), left: 0.25, top: 0, right: 0.25, bottom: 0, of: id, in: &presentation)
+        state.setAltText("A chart of sales", in: &presentation)
+
+        var copy = try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+        let shape = try #require(copy.slides[0].shapes.last)
+        guard case .picture(let picture) = shape.kind else {
+            Issue.record("Expected a picture")
+            return
+        }
+        #expect(picture.cropLeft == 0.25 && picture.cropRight == 0.25)
+        #expect(shape.altText == "A chart of sales")
+        #expect(SlideShape.Picture.imageRect(frame: shape.frame.points, picture: picture).width == 40)
+
+        let reopened = EditorState()
+        reopened.selectSlide(copy.slides[0].id)
+        reopened.selectedShapeID = shape.id
+        reopened.replacePicture(with: PreparedMedia(png: png, size: CGSize(width: 10, height: 10)), in: &copy)
+        let final = try PPTXReader.presentation(from: PPTXWriter.data(from: copy))
+        guard case .picture(let replaced) = try #require(final.slides[0].shapes.last).kind else {
+            Issue.record("Expected a picture")
+            return
+        }
+        #expect(replaced.cropLeft == 0)
+        #expect(replaced.imagePath != picture.imagePath)
+        #expect(final.data(at: replaced.imagePath ?? "") == png)
+    }
+}

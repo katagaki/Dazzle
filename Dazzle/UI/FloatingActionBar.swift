@@ -105,6 +105,12 @@ struct FloatingActionBar: View {
                 panelAction("textformat", label: "ActionBar.TextFormat", panel: .text)
                     .accessibilityIdentifier("textFormat")
             }
+            if shape.isPicture, shape.isEditable, shape.rotation == 0, !state.hasMultipleSelection {
+                action("crop", isOn: state.croppingShapeID == shape.id, label: "ActionBar.Crop") {
+                    state.croppingShapeID = state.croppingShapeID == shape.id ? nil : shape.id
+                }
+                .accessibilityIdentifier("crop")
+            }
             if case .table = shape.kind, shape.isEditable, !state.hasMultipleSelection {
                 TableMenu(presentation: $presentation, state: state) {
                     ActionSymbol(name: "tablecells", isOn: false)

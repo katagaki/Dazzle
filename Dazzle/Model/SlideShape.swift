@@ -16,6 +16,10 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
         case placeholder
         /// A table's rows, columns or cells.
         case table
+        /// A picture's image or its crop.
+        case picture
+        /// The description read out in place of the shape.
+        case altText
     }
 
     enum Kind: Equatable, Hashable, Sendable {
@@ -32,6 +36,16 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
     }
 
     struct Picture: Equatable, Hashable, Sendable {
+        /// Where the whole image lies when `frame` shows the cropped part, in points.
+        static func imageRect(frame: CGRect, picture: Picture) -> CGRect {
+            let visibleWidth = 1 - picture.cropLeft - picture.cropRight
+            let visibleHeight = 1 - picture.cropTop - picture.cropBottom
+            guard visibleWidth > 0.001, visibleHeight > 0.001 else { return frame }
+            let width = frame.width / visibleWidth
+            let height = frame.height / visibleHeight
+            return CGRect(x: frame.minX - width * picture.cropLeft, y: frame.minY - height * picture.cropTop, width: width, height: height)
+        }
+
         /// The image's path inside the package; `nil` for a linked image.
         var imagePath: String?
         /// Fractions of the image cut from each edge.
@@ -72,6 +86,8 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
     /// For SmartArt shapes, where the text goes when it is not the whole shape.
     var textFrame: EMURect?
     var isTextBox = false
+    /// `descr`: what the shape shows, for people who cannot see it.
+    var altText: String?
     /// Read from XML Dazzle can show but not safely rewrite, such as a shape
     /// offered in two forms for different versions of PowerPoint. It can be
     /// deleted, but not changed.

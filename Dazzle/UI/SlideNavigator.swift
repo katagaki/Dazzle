@@ -11,33 +11,17 @@ struct SlideNavigator: View {
 
     @State private var dropTargetID: Slide.ID?
 
-    /// How far in from the strip's ends thumbnails fade, and so how far the
-    /// first and last sit in from them.
-    private static let edgeFade: CGFloat = 16
-
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(axis == .vertical ? .vertical : .horizontal) {
                 stack
                     .padding(axis == .vertical ? EdgeInsets(top: 4, leading: 12, bottom: 96, trailing: 12)
-                             : EdgeInsets(top: 8, leading: Self.edgeFade, bottom: 8, trailing: Self.edgeFade))
+                             : EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
                     .animation(.snappy(duration: 0.22), value: presentation.slides.map(\.id))
             }
             .scrollIndicators(.hidden)
-            .mask {
-                // Thumbnails fade out at the strip's ends rather than being cut off.
-                if axis == .horizontal {
-                    HStack(spacing: 0) {
-                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: Self.edgeFade)
-                        Color.black
-                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: Self.edgeFade)
-                    }
-                } else {
-                    Color.black
-                }
-            }
+            // Thumbnails blur away beneath the strip's buttons.
+            .scrollEdgeEffectStyle(.soft, for: .horizontal)
             .onChange(of: state.selectedSlideID) { _, id in
                 guard let id else { return }
                 withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
@@ -168,7 +152,8 @@ struct NewSlideMenu<Label: View>: View {
 }
 
 /// The iPhone's strip of slides along the bottom, Tables' sheet tabs'
-/// counterpart: a glass add button, then the thumbnails.
+/// counterpart: the thumbnails, flowing beneath a glass add button at one
+/// end and the trailing controls at the other.
 struct SlideStrip<Trailing: View>: View {
     @Binding var presentation: Presentation
     @Bindable var state: EditorState
@@ -176,21 +161,21 @@ struct SlideStrip<Trailing: View>: View {
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
-        HStack(spacing: 4) {
-            NewSlideMenu(presentation: $presentation, state: state) {
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 40, height: 40)
+        SlideNavigator(presentation: $presentation, state: state, axis: .horizontal, play: play)
+            .safeAreaBar(edge: .leading) {
+                NewSlideMenu(presentation: $presentation, state: state) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 40, height: 40)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .padding(.leading, 12)
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .circle)
-            .padding(.leading, 12)
-
-            SlideNavigator(presentation: $presentation, state: state, axis: .horizontal, play: play)
-
-            trailing()
-                .padding(.trailing, 12)
-        }
-        .frame(height: 68)
+            .safeAreaBar(edge: .trailing) {
+                trailing()
+                    .padding(.trailing, 12)
+            }
+            .frame(height: 68)
     }
 }

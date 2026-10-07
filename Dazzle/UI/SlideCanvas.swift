@@ -4,9 +4,9 @@ import SwiftUI
 /// shape's frame and handles drawn over it.
 ///
 /// Tap a shape to select it, drag it to move it, drag a handle to resize
-/// it, and double-tap one with text to edit the text. Moves and resizes are
-/// previewed live and written to the document once, when the finger lifts,
-/// so each is a single undo step.
+/// it, drag the handle above it to turn it, and double-tap one with text to
+/// edit the text. Moves, resizes and turns are previewed live and written to
+/// the document once, when the finger lifts, so each is a single undo step.
 struct SlideCanvas: View {
     @Binding var presentation: Presentation
     @Bindable var state: EditorState
@@ -15,14 +15,29 @@ struct SlideCanvas: View {
     /// Lift the slide to the top, clear of a panel covering the lower half.
     var isRaised = false
 
-    /// A move or resize in progress, in slide points.
+    /// A move, resize or turn in progress, in slide points and degrees.
     @State private var interaction: Interaction?
 
     private struct Interaction: Equatable {
         var shapeID: SlideShape.ID
         var original: CGRect
         var frame: CGRect
+        var originalRotation: Double
+        var rotation: Double
+
+        init(shapeID: SlideShape.ID, original: CGRect, frame: CGRect, rotation: Double) {
+            self.shapeID = shapeID
+            self.original = original
+            self.frame = frame
+            originalRotation = rotation
+            self.rotation = rotation
+        }
+
+        var isChange: Bool { frame != original || rotation != originalRotation }
     }
+
+    /// How far above a shape its rotation handle sits, in view points.
+    private static let rotationHandleDistance: CGFloat = 28
 
     var body: some View {
         GeometryReader { proxy in
@@ -67,15 +82,17 @@ struct SlideCanvas: View {
                 .frame(width: size.width, height: size.height)
             }
         }
+        .coordinateSpace(.named(Self.coordinateSpace))
     }
 
-    /// The slide with the move or resize in progress applied.
+    /// The slide with the move, resize or turn in progress applied.
     private func preview(of slide: Slide) -> Slide {
         guard let interaction, let index = slide.shapes.firstIndex(where: { $0.id == interaction.shapeID }) else {
             return slide
         }
         var slide = slide
         slide.shapes[index].frame = EMURect(points: interaction.frame)
+        slide.shapes[index].rotation = interaction.rotation
         return slide
     }
 
@@ -87,7 +104,9 @@ struct SlideCanvas: View {
         let slop = 10 / scale
         return slide.shapes.reversed().first { shape in
             let frame = shape.frame.points
-            return frame.insetBy(dx: frame.width < slop ? -slop : 0, dy: frame.height < slop ? -slop : 0).contains(point)
+            // A turned shape is tested in its own unturned space.
+            let local = Self.rotate(point, around: CGPoint(x: frame.midX, y: frame.midY), by: -shape.rotation)
+            return frame.insetBy(dx: frame.width < slop ? -slop : 0, dy: frame.height < slop ? -slop : 0).contains(local)
         }
     }
 
@@ -113,7 +132,9 @@ struct SlideCanvas: View {
                     guard let shape = shape(at: start, on: slide, scale: scale), shape.isEditable,
                           slide.canEditShapes else { return }
                     state.selectedShapeID = shape.id
-                    interaction = Interaction(shapeID: shape.id, original: shape.frame.points, frame: shape.frame.points)
+                    interaction = Interaction(
+                        shapeID: shape.id, original: shape.frame.points, frame: shape.frame.points, rotation: shape.rotation
+                    )
                 }
                 guard var current = interaction else { return }
                 current.frame = current.original.offsetBy(dx: value.translation.width / scale, dy: value.translation.height / scale)
@@ -121,9 +142,7 @@ struct SlideCanvas: View {
             }
             .onEnded { value in
                 if let interaction {
-                    if interaction.frame != interaction.original {
-                        state.setFrame(interaction.frame, of: interaction.shapeID, in: &presentation)
-                    }
+                    commit(interaction)
                     self.interaction = nil
                 } else if abs(value.translation.width) > 60, abs(value.translation.width) > abs(value.translation.height) * 1.5 {
                     onSwipe(value.translation.width < 0)
@@ -167,6 +186,9 @@ struct SlideCanvas: View {
                 .allowsHitTesting(false)
 
             if shape.isEditable {
+                if shape.canRotate {
+                    rotationHandle(for: shape, in: rect, scale: scale)
+                }
                 ForEach(handles(for: rect)) { handle in
                     let point = position(of: handle, in: rect)
                     Circle()
@@ -211,40 +233,126 @@ struct SlideCanvas: View {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 let original = interaction?.original ?? shape.frame.points
-                let dx = value.translation.width / scale
-                let dy = value.translation.height / scale
-                var minX = original.minX
-                var maxX = original.maxX
-                var minY = original.minY
-                var maxY = original.maxY
-                if handle.unit.x < 0 { minX += dx }
-                if handle.unit.x > 0 { maxX += dx }
-                if handle.unit.y < 0 { minY += dy }
-                if handle.unit.y > 0 { maxY += dy }
-                let minimum: CGFloat = 4
-                // A line keeps its zero thickness; anything else keeps some size.
-                if original.width >= minimum { maxX = max(maxX, minX + minimum) }
-                if original.height >= minimum { maxY = max(maxY, minY + minimum) }
-                var frame = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-
-                // Pictures keep their proportions when pulled by a corner.
-                if handle.isCorner, shape.isPicture, original.width > 0, original.height > 0 {
-                    let ratio = max(frame.width / original.width, frame.height / original.height)
-                    let width = original.width * ratio
-                    let height = original.height * ratio
-                    frame = CGRect(
-                        x: handle.unit.x < 0 ? original.maxX - width : original.minX,
-                        y: handle.unit.y < 0 ? original.maxY - height : original.minY,
-                        width: width, height: height
-                    )
-                }
-                interaction = Interaction(shapeID: shape.id, original: original, frame: frame)
+                // The drag, turned into the shape's own unturned space.
+                let drag = Self.rotate(
+                    CGPoint(x: value.translation.width / scale, y: value.translation.height / scale),
+                    around: .zero, by: -shape.rotation
+                )
+                let local = Self.resized(original, by: handle, dx: drag.x, dy: drag.y, keepsAspect: handle.isCorner && shape.isPicture)
+                // The side opposite the handle stays put on the slide: the
+                // centre moves by the size change, turned back onto the slide.
+                let shift = Self.rotate(
+                    CGPoint(x: local.midX - original.midX, y: local.midY - original.midY), around: .zero, by: shape.rotation
+                )
+                let frame = CGRect(
+                    x: original.midX + shift.x - local.width / 2, y: original.midY + shift.y - local.height / 2,
+                    width: local.width, height: local.height
+                )
+                interaction = Interaction(shapeID: shape.id, original: original, frame: frame, rotation: shape.rotation)
             }
             .onEnded { _ in
-                if let interaction, interaction.frame != interaction.original {
-                    state.setFrame(interaction.frame, of: interaction.shapeID, in: &presentation)
-                }
+                if let interaction { commit(interaction) }
                 interaction = nil
             }
+    }
+
+    /// `rect` with the edges `handle` moves moved, kept at least a little
+    /// size, and for a picture pulled by a corner, kept in proportion.
+    private static func resized(_ original: CGRect, by handle: Handle, dx: CGFloat, dy: CGFloat, keepsAspect: Bool) -> CGRect {
+        var minX = original.minX
+        var maxX = original.maxX
+        var minY = original.minY
+        var maxY = original.maxY
+        if handle.unit.x < 0 { minX += dx }
+        if handle.unit.x > 0 { maxX += dx }
+        if handle.unit.y < 0 { minY += dy }
+        if handle.unit.y > 0 { maxY += dy }
+        let minimum: CGFloat = 4
+        // A line keeps its zero thickness; anything else keeps some size.
+        if original.width >= minimum { maxX = max(maxX, minX + minimum) }
+        if original.height >= minimum { maxY = max(maxY, minY + minimum) }
+        var frame = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+
+        if keepsAspect, original.width > 0, original.height > 0 {
+            let ratio = max(frame.width / original.width, frame.height / original.height)
+            let width = original.width * ratio
+            let height = original.height * ratio
+            frame = CGRect(
+                x: handle.unit.x < 0 ? original.maxX - width : original.minX,
+                y: handle.unit.y < 0 ? original.maxY - height : original.minY,
+                width: width, height: height
+            )
+        }
+        return frame
+    }
+
+    // MARK: - Rotation
+
+    /// A handle on a stalk above the shape, dragged round its centre to turn it.
+    private func rotationHandle(for shape: SlideShape, in rect: CGRect, scale: CGFloat) -> some View {
+        let top = CGPoint(x: rect.midX, y: rect.minY - Self.rotationHandleDistance)
+        return ZStack(alignment: .topLeading) {
+            Path { path in
+                path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+                path.addLine(to: top)
+            }
+            .stroke(Color.accentColor, lineWidth: 1.5)
+            .allowsHitTesting(false)
+
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 18, height: 18)
+                .background(.white, in: .circle)
+                .overlay(Circle().strokeBorder(Color.accentColor, lineWidth: 1.5))
+                .padding(9)
+                .contentShape(.circle)
+                .offset(x: top.x - 18, y: top.y - 18)
+                .gesture(rotationGesture(shape: shape, center: CGPoint(x: rect.midX, y: rect.midY)))
+                .accessibilityIdentifier("rotationHandle")
+                .accessibilityLabel("Canvas.Rotate")
+        }
+    }
+
+    /// Turns the shape to face the finger. Within a few degrees of a
+    /// multiple of 15 it settles on the multiple, so square is easy to find.
+    private func rotationGesture(shape: SlideShape, center: CGPoint) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.coordinateSpace))
+            .onChanged { value in
+                // The handle starts straight up from the centre, at 0°; the
+                // selection is drawn turned, so its location is in canvas space.
+                let angle = atan2(value.location.x - center.x, center.y - value.location.y) * 180 / .pi
+                var degrees = (angle + 360).truncatingRemainder(dividingBy: 360)
+                let nearest = (degrees / 15).rounded() * 15
+                if abs(degrees - nearest) < 4 { degrees = nearest.truncatingRemainder(dividingBy: 360) }
+                let frame = shape.frame.points
+                var current = interaction ?? Interaction(shapeID: shape.id, original: frame, frame: frame, rotation: shape.rotation)
+                current.rotation = degrees
+                interaction = current
+            }
+            .onEnded { _ in
+                if let interaction { commit(interaction) }
+                interaction = nil
+            }
+    }
+
+    // MARK: - Committing
+
+    private func commit(_ interaction: Interaction) {
+        guard interaction.isChange else { return }
+        state.setTransform(
+            frame: interaction.frame, rotation: interaction.rotation, of: interaction.shapeID, in: &presentation
+        )
+    }
+
+    private static let coordinateSpace = "slideCanvas"
+
+    /// `point` turned `degrees` clockwise round `center`, in a y-down space.
+    static func rotate(_ point: CGPoint, around center: CGPoint, by degrees: Double) -> CGPoint {
+        guard degrees != 0 else { return point }
+        let radians = degrees * .pi / 180
+        let dx = point.x - center.x
+        let dy = point.y - center.y
+        return CGPoint(x: center.x + dx * cos(radians) - dy * sin(radians), y: center.y + dx * sin(radians) + dy * cos(radians))
     }
 }

@@ -97,6 +97,22 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
         }
     }
 
+    /// Whether it can be turned and flipped. PowerPoint keeps tables, charts
+    /// and other graphic frames square to the slide.
+    var canRotate: Bool {
+        guard isEditable else { return false }
+        return switch kind {
+        case .shape, .connector, .picture, .group: true
+        case .table, .chart, .diagram, .unsupported: false
+        }
+    }
+
+    /// Degrees brought into 0..<360.
+    static func normalized(_ degrees: Double) -> Double {
+        let turned = degrees.truncatingRemainder(dividingBy: 360)
+        return turned < 0 ? turned + 360 : turned
+    }
+
     var canHoldText: Bool {
         switch kind {
         case .shape: true

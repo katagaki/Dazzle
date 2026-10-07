@@ -317,6 +317,32 @@ final class EditorState {
         }
     }
 
+    /// Moves, resizes and turns a shape at once. `rotation` is in degrees clockwise.
+    func setTransform(frame: CGRect, rotation: Double, of id: SlideShape.ID, in presentation: inout Presentation) {
+        updateShape(id, edits: [.transform], in: &presentation) { shape in
+            shape.frame = EMURect(points: frame)
+            shape.hasOwnFrame = true
+            shape.rotation = SlideShape.normalized(rotation)
+        }
+    }
+
+    /// Turns the selected shape a quarter turn either way.
+    func rotateSelectedShape(clockwise: Bool, in presentation: inout Presentation) {
+        updateShape(selectedShapeID, edits: [.transform], in: &presentation) { shape in
+            guard shape.canRotate else { return }
+            shape.rotation = SlideShape.normalized(shape.rotation + (clockwise ? 90 : -90))
+            shape.hasOwnFrame = true
+        }
+    }
+
+    func flipSelectedShape(horizontally: Bool, in presentation: inout Presentation) {
+        updateShape(selectedShapeID, edits: [.transform], in: &presentation) { shape in
+            guard shape.canRotate else { return }
+            if horizontally { shape.flipsHorizontally.toggle() } else { shape.flipsVertically.toggle() }
+            shape.hasOwnFrame = true
+        }
+    }
+
     // MARK: - Text
 
     func setText(_ text: String, in presentation: inout Presentation) {

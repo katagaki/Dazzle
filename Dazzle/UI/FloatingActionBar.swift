@@ -90,7 +90,7 @@ struct FloatingActionBar: View {
                     .accessibilityIdentifier("editText")
             }
             if shape.isEditable {
-                arrangeMenu
+                arrangeMenu(for: shape)
                 action("plus.square.on.square", label: "ActionBar.Duplicate") {
                     state.duplicateSelectedShape(in: &presentation)
                 }
@@ -122,7 +122,7 @@ struct FloatingActionBar: View {
         .accessibilityLabel("ActionBar.Shape")
     }
 
-    private var arrangeMenu: some View {
+    private func arrangeMenu(for shape: SlideShape) -> some View {
         Menu {
             Button("Arrange.Front", systemImage: "square.3.layers.3d.top.filled") {
                 state.arrangeSelectedShape(.front, in: &presentation)
@@ -135,6 +135,9 @@ struct FloatingActionBar: View {
             }
             Button("Arrange.Back", systemImage: "square.3.layers.3d.bottom.filled") {
                 state.arrangeSelectedShape(.back, in: &presentation)
+            }
+            if shape.canRotate {
+                RotateAndFlipButtons(presentation: $presentation, state: state)
             }
         } label: {
             ActionSymbol(name: "square.3.layers.3d", isOn: false)
@@ -182,6 +185,29 @@ struct FloatingActionBar: View {
             return
         }
         state.insertPicture(media, in: &presentation)
+    }
+}
+
+/// Quarter turns and flips, for the arrange menu and the format panel.
+struct RotateAndFlipButtons: View {
+    @Binding var presentation: Presentation
+    @Bindable var state: EditorState
+
+    var body: some View {
+        Section {
+            Button("Arrange.RotateLeft", systemImage: "rotate.left") {
+                state.rotateSelectedShape(clockwise: false, in: &presentation)
+            }
+            Button("Arrange.RotateRight", systemImage: "rotate.right") {
+                state.rotateSelectedShape(clockwise: true, in: &presentation)
+            }
+            Button("Arrange.FlipHorizontal", systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right") {
+                state.flipSelectedShape(horizontally: true, in: &presentation)
+            }
+            Button("Arrange.FlipVertical", systemImage: "arrow.up.and.down.righttriangle.up.righttriangle.down") {
+                state.flipSelectedShape(horizontally: false, in: &presentation)
+            }
+        }
     }
 }
 

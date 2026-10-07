@@ -128,6 +128,27 @@ struct FormatPanel: View {
                 state.arrangeSelectedShape(.back, in: &presentation)
             }
         }
+        if shape.canRotate {
+            Section("Format.Section.Rotate") {
+                LabeledContent("Format.Rotation") {
+                    Stepper(
+                        value: Binding(
+                            get: { shape.rotation.rounded() },
+                            set: { value in
+                                state.setTransform(frame: shape.frame.points, rotation: value, of: shape.id, in: &presentation)
+                            }
+                        ),
+                        in: -360...720, step: 1
+                    ) {
+                        Text(verbatim: "\(Int(shape.rotation.rounded()))°")
+                            .monospacedDigit()
+                    }
+                    .fixedSize()
+                    .accessibilityIdentifier("rotation")
+                }
+                RotateAndFlipButtons(presentation: $presentation, state: state)
+            }
+        }
     }
 
     private func outlineSection(_ shape: SlideShape) -> some View {

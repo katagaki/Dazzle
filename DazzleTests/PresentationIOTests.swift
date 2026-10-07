@@ -124,6 +124,21 @@ struct RoundTripTests {
         #expect(copy.slides[0].shapes[1].hasOwnFrame)
     }
 
+    @Test("Turned and flipped shapes keep their rotation and flips")
+    func rotatedShape() throws {
+        var presentation = Presentation.blank
+        presentation.slides[0].shapes[1].rotation = 30
+        presentation.slides[0].shapes[1].flipsHorizontally = true
+        presentation.slides[0].shapes[1].hasOwnFrame = true
+        presentation.slides[0].shapes[1].edits.insert(.transform)
+        presentation.slides[0].isModified = true
+        let copy = try reread(presentation)
+        #expect(copy.slides[0].shapes[1].rotation == 30)
+        #expect(copy.slides[0].shapes[1].flipsHorizontally)
+        #expect(!copy.slides[0].shapes[1].flipsVertically)
+        #expect(SlideShape.normalized(-90) == 270)
+    }
+
     @Test("Added, duplicated and reordered slides survive saving")
     func structure() throws {
         var presentation = Presentation.blank

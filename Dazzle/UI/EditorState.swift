@@ -423,6 +423,49 @@ final class EditorState {
         setFrames(frames, in: &presentation)
     }
 
+    // MARK: - Groups
+
+    var canGroupSelection: Bool { selectedShapeIDs.count > 1 }
+
+    /// Gathers the selected shapes into a group, which takes the place of the
+    /// topmost of them.
+    func groupSelectedShapes(in presentation: inout Presentation) {
+        let members = selectedShapes(in: presentation).filter { $0.isEditable && $0.placeholder == nil }
+        guard members.count > 1, let slide = selectedSlide(in: presentation) else { return }
+        let bounds = members.map(\.boundingBox).reduce(CGRect.null) { $0.union($1) }
+        let frame = EMURect(points: bounds)
+        let id = slide.nextShapeID
+        let group = SlideShape(
+            shapeID: id, name: "Group \(id - 1)",
+            kind: .group(SlideShape.ShapeGroup(childFrame: frame, children: members)), frame: frame
+        )
+        let ids = Set(members.map(\.id))
+        updateSlide(in: &presentation) { slide in
+            guard let top = slide.shapes.lastIndex(where: { ids.contains($0.id) }) else { return }
+            let position = top - slide.shapes[..<top].filter { ids.contains($0.id) }.count
+            slide.shapes.removeAll { ids.contains($0.id) }
+            slide.shapes.insert(group, at: position)
+        }
+        selectedShapeIDs = [group.id]
+        isSelectingMultiple = false
+    }
+
+    /// Breaks the selected group up into its members, placed on the slide
+    /// where the group showed them.
+    func ungroupSelectedShape(in presentation: inout Presentation) {
+        guard let group = selectedShape(in: presentation), group.isEditable,
+              case .group(let contents) = group.kind else { return }
+        let members = contents.children.map { SlideShape.ungrouped($0, from: group, childFrame: contents.childFrame) }
+        updateSlide(in: &presentation) { slide in
+            guard let index = slide.shapes.firstIndex(where: { $0.id == group.id }) else { return }
+            slide.shapes.replaceSubrange(index...index, with: members)
+            // Animations on the group pointed at a shape that is gone.
+            slide.hasRemovedShapes = true
+        }
+        selectedShapeIDs = members.map(\.id)
+        isSelectingMultiple = members.count > 1
+    }
+
     /// Moves several shapes at once, as one change. Frames are in points.
     func setFrames(_ frames: [SlideShape.ID: CGRect], in presentation: inout Presentation) {
         updateSlide(in: &presentation) { slide in
@@ -582,6 +625,49 @@ final class EditorState {
 }
 
 extension SlideShape {
+    /// The slide-space box a turned shape covers, in points.
+    var boundingBox: CGRect {
+        let frame = self.frame.points
+        guard rotation.truncatingRemainder(dividingBy: 180) != 0 else { return frame }
+        let radians = rotation * .pi / 180
+        let width = abs(frame.width * cos(radians)) + abs(frame.height * sin(radians))
+        let height = abs(frame.width * sin(radians)) + abs(frame.height * cos(radians))
+        return CGRect(x: frame.midX - width / 2, y: frame.midY - height / 2, width: width, height: height)
+    }
+
+    /// A group member as it stands on the slide once out of `group`: moved
+    /// from the group's member space into slide space, and turned and
+    /// flipped as the group turned and flipped it.
+    static func ungrouped(_ member: SlideShape, from group: SlideShape, childFrame: EMURect) -> SlideShape {
+        var shape = SlideRenderer.placed(member, from: childFrame, into: group.frame)
+        let groupFrame = group.frame.points
+        let center = CGPoint(x: groupFrame.midX, y: groupFrame.midY)
+        var frame = shape.frame.points
+        var middle = CGPoint(x: frame.midX, y: frame.midY)
+        if group.flipsHorizontally {
+            middle.x = 2 * center.x - middle.x
+            shape.flipsHorizontally.toggle()
+            shape.rotation = -shape.rotation
+        }
+        if group.flipsVertically {
+            middle.y = 2 * center.y - middle.y
+            shape.flipsVertically.toggle()
+            shape.rotation = -shape.rotation
+        }
+        if group.rotation != 0 {
+            let radians = group.rotation * .pi / 180
+            let dx = middle.x - center.x
+            let dy = middle.y - center.y
+            middle = CGPoint(x: center.x + dx * cos(radians) - dy * sin(radians), y: center.y + dx * sin(radians) + dy * cos(radians))
+        }
+        frame.origin = CGPoint(x: middle.x - frame.width / 2, y: middle.y - frame.height / 2)
+        shape.frame = EMURect(points: frame)
+        shape.rotation = normalized(shape.rotation + group.rotation)
+        shape.hasOwnFrame = true
+        shape.edits.insert(.transform)
+        return shape
+    }
+
     /// A copy with an identity of its own, everywhere down its children.
     init(copying shape: SlideShape) {
         self = SlideShape.copy(of: shape)

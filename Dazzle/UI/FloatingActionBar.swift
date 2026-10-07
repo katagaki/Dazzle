@@ -149,6 +149,7 @@ struct FloatingActionBar: View {
             Button("Arrange.Back", systemImage: "square.3.layers.3d.bottom.filled") {
                 state.arrangeSelectedShape(.back, in: &presentation)
             }
+            GroupButtons(presentation: $presentation, state: state)
             if shape.canRotate, !state.hasMultipleSelection {
                 RotateAndFlipButtons(presentation: $presentation, state: state)
             }
@@ -245,6 +246,28 @@ struct AlignButtons: View {
                 }
                 Button("Align.DistributeVertically", systemImage: "distribute.vertical.center") {
                     state.distributeSelectedShapes(horizontally: false, in: &presentation)
+                }
+            }
+        }
+    }
+}
+
+/// Group, for several shapes; Ungroup, for a group.
+struct GroupButtons: View {
+    @Binding var presentation: Presentation
+    @Bindable var state: EditorState
+
+    var body: some View {
+        if state.canGroupSelection {
+            Section {
+                Button("Arrange.Group", systemImage: "square.on.square.squareshape.controlhandles") {
+                    state.groupSelectedShapes(in: &presentation)
+                }
+            }
+        } else if let shape = state.selectedShape(in: presentation), case .group = shape.kind {
+            Section {
+                Button("Arrange.Ungroup", systemImage: "square.on.square.dashed") {
+                    state.ungroupSelectedShape(in: &presentation)
                 }
             }
         }

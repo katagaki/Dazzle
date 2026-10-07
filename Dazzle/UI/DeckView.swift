@@ -330,6 +330,14 @@ struct DeckView: View {
                     state.selectAllShapes(in: document.presentation)
                     return .handled
                 }
+                if press.modifiers.contains(.command), press.characters.lowercased() == "g" {
+                    if press.modifiers.contains(.shift) {
+                        state.ungroupSelectedShape(in: &document.presentation)
+                    } else {
+                        state.groupSelectedShapes(in: &document.presentation)
+                    }
+                    return .handled
+                }
                 return .ignored
             }
             guard shape.isEditable else { return .handled }

@@ -146,12 +146,15 @@ final class ShapeParser {
     private func group(_ element: XMLElement) -> SlideShape {
         let (id, name, _) = nonVisualProperties(element)
         let transform = element.firstChild(named: "grpSpPr")?.firstChild(named: "xfrm")
+        // Members keep their own XML too, so that ungrouping can write
+        // each back on its own.
         let children = ShapeParser(
             partPath: partPath, relationships: relationships, namespaces: namespaces,
-            inheritedShapes: inheritedShapes, parts: parts
+            inheritedShapes: inheritedShapes, parts: parts, capturesSource: capturesSource
         )
         let shapes = children.shapes(in: element)
         features.formUnion(children.features)
+        if children.hasUncapturableShape { hasUncapturableShape = true }
         var childFrame = EMURect.zero
         if let offset = transform?.firstChild(named: "chOff"), let extent = transform?.firstChild(named: "chExt") {
             childFrame = EMURect(

@@ -129,6 +129,7 @@ struct FormatPanel: View {
             }
         }
         AlignButtons(presentation: $presentation, state: state)
+        GroupButtons(presentation: $presentation, state: state)
         if shape.canRotate, !state.hasMultipleSelection {
             Section("Format.Section.Rotate") {
                 LabeledContent("Format.Rotation") {

@@ -55,6 +55,14 @@ struct ShapeWriter {
         let name = XMLLite.escape(shape.name)
         let identity = "<p:cNvPr id=\"\(shape.shapeID)\" name=\"\(name)\"/>"
         switch shape.kind {
+        case .group(let group):
+            // Members are written in full inside the group, each as it would be on the slide.
+            let members = group.children.compactMap { xml(for: $0) }.joined()
+            return """
+                <p:grpSp><p:nvGrpSpPr>\(identity)<p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm>\
+                <a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm>\
+                </p:grpSpPr>\(members)</p:grpSp>
+                """
         case .picture(let picture):
             let reference = relationshipID(forImage: picture.imagePath ?? "")
             return """
@@ -152,6 +160,13 @@ struct ShapeWriter {
         extent.setAttribute("cy", String(max(shape.frame.height, 0)))
         if offset.parent == nil { transform.insertChild(offset, at: 0) }
         if extent.parent == nil { transform.insertChild(extent, at: 1) }
+        // A group Dazzle made maps its members' space onto its frame one to one.
+        if shape.source == nil, case .group(let group) = shape.kind {
+            transform.firstChild(named: "chOff")?.setAttribute("x", String(group.childFrame.x))
+            transform.firstChild(named: "chOff")?.setAttribute("y", String(group.childFrame.y))
+            transform.firstChild(named: "chExt")?.setAttribute("cx", String(max(group.childFrame.width, 0)))
+            transform.firstChild(named: "chExt")?.setAttribute("cy", String(max(group.childFrame.height, 0)))
+        }
     }
 
     /// Gives a copied shape, and everything inside it, ids of its own.

@@ -403,4 +403,41 @@ struct EditingTests {
         state.arrangeSelectedShape(.forward, in: &presentation)
         #expect(Array(presentation.slides[0].shapes.suffix(3).map(\.id)) == [ids[2], ids[0], ids[1]])
     }
+
+    @Test("Grouping writes a group PowerPoint can read, and ungrouping puts the members back")
+    func groupAndUngroup() throws {
+        var (presentation, state) = deck(with: [
+            CGRect(x: 10, y: 10, width: 50, height: 50), CGRect(x: 100, y: 40, width: 20, height: 20),
+        ])
+        state.groupSelectedShapes(in: &presentation)
+        let group = try #require(state.selectedShape(in: presentation))
+        #expect(group.frame.points.minX == 10 && group.frame.points.maxX == 120)
+
+        var copy = try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+        guard case .group(let read) = try #require(copy.slides[0].shapes.last).kind else {
+            Issue.record("Expected a group")
+            return
+        }
+        #expect(read.children.count == 2)
+        #expect(read.children.allSatisfy { $0.source != nil })
+
+        let reread = EditorState()
+        reread.selectSlide(copy.slides[0].id)
+        reread.selectedShapeID = copy.slides[0].shapes.last?.id
+        reread.ungroupSelectedShape(in: &copy)
+        let final = try PPTXReader.presentation(from: PPTXWriter.data(from: copy))
+        let frames = final.slides[0].shapes.suffix(2).map(\.frame.points)
+        #expect(frames.map(\.minX) == [10, 100])
+    }
+
+    @Test("A member of a turned group comes out turned with it")
+    func ungroupTurned() {
+        var group = SlideShape(shapeID: 2, name: "", kind: .shape, frame: EMURect(points: CGRect(x: 0, y: 0, width: 100, height: 100)))
+        group.rotation = 90
+        let member = SlideShape(shapeID: 3, name: "", kind: .shape, frame: EMURect(points: CGRect(x: 0, y: 0, width: 50, height: 100)))
+        let placed = SlideShape.ungrouped(member, from: group, childFrame: group.frame)
+        #expect(placed.rotation == 90)
+        // The left half, turned a quarter clockwise, is the top half.
+        #expect(abs(placed.frame.points.midX - 50) < 0.01 && abs(placed.frame.points.midY - 25) < 0.01)
+    }
 }

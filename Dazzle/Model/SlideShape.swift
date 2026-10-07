@@ -14,6 +14,8 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
         case identity
         /// No longer a placeholder: pasted where its layout has no place for it.
         case placeholder
+        /// A table's rows, columns or cells.
+        case table
     }
 
     enum Kind: Equatable, Hashable, Sendable {

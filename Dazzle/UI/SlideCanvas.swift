@@ -96,6 +96,11 @@ struct SlideCanvas: View {
                 textEditor(for: shape, on: displayed, scale: scale)
             }
 
+            if !state.isDrawing, let shape = state.selectedShape(in: presentation), case .table(let table) = shape.kind,
+               let position = state.selectedCell, table.cell(at: position) != nil, interaction == nil {
+                cellOverlay(table: table, shape: shape, position: position, on: displayed, scale: scale)
+            }
+
             if state.isDrawing {
                 DrawingOverlay(scale: scale) { media, frame in
                     state.insertPicture(media, frame: frame, name: String(localized: "Drawing.ShapeName"), in: &presentation)
@@ -112,7 +117,74 @@ struct SlideCanvas: View {
     private var renderOptions: SlideRenderer.Options {
         var options = SlideRenderer.Options.editing
         options.bulletsOnlyShapeID = state.editingTextShapeID
+        if state.isEditingCell, let id = state.selectedShapeID, let position = state.selectedCell {
+            options.editingCell = TableEditingCell(shapeID: id, position: position)
+        }
         return options
+    }
+
+    // MARK: - Tables
+
+    private func tableLayout(_ table: SlideTable, shape: SlideShape, on slide: Slide) -> TableLayout {
+        TableLayout(
+            table: table, frame: shape.frame.points, style: SlideStyleContext(presentation: presentation, slide: slide),
+            presentation: presentation, slideNumber: (presentation.index(of: slide.id) ?? 0) + 1
+        )
+    }
+
+    /// The picked cell, outlined; while it is being typed into, its text editor.
+    @ViewBuilder
+    private func cellOverlay(
+        table: SlideTable, shape: SlideShape, position: TableCellPosition, on slide: Slide, scale: CGFloat
+    ) -> some View {
+        let layout = tableLayout(table, shape: shape, on: slide)
+        let rect = layout.rect(of: position)
+        Rectangle()
+            .strokeBorder(Color.accentColor, lineWidth: 2.5)
+            .frame(width: max(rect.width * scale, 1), height: max(rect.height * scale, 1))
+            .offset(x: rect.minX * scale, y: rect.minY * scale)
+            .allowsHitTesting(false)
+        if state.isEditingCell, let cell = table.cell(at: position) {
+            let body = cell.text ?? TextBody(paragraphs: [Paragraph(runs: [])])
+            let area = CGRect(
+                x: rect.minX + EMU.points(cell.marginLeft ?? 91_440), y: rect.minY + EMU.points(cell.marginTop ?? 45_720),
+                width: rect.width - EMU.points((cell.marginLeft ?? 91_440) + (cell.marginRight ?? 91_440)),
+                height: rect.height - EMU.points((cell.marginTop ?? 45_720) + (cell.marginBottom ?? 45_720))
+            )
+            InPlaceTextEditor(
+                body: body, shape: TableLayout.cellShape(body, rect), sources: [layout.styleSource(forRow: position.row)],
+                style: layout.style, slideNumber: (presentation.index(of: slide.id) ?? 0) + 1, scale: scale, fontScale: 1,
+                anchor: cell.anchor ?? .top, selection: state.textSelection,
+                onChange: { state.setCellText($0, in: &presentation) },
+                onSelectionChange: { state.textSelection = $0 },
+                toolbar: textToolbar
+            )
+            .frame(width: max(area.width * scale, 1), height: max(area.height * scale, 1))
+            .offset(x: area.minX * scale, y: area.minY * scale)
+            .id(position)
+            .accessibilityIdentifier("cellTextEditor")
+        }
+    }
+
+    /// The buttons above the keyboard, for a shape's text or a cell's.
+    private var textToolbar: InPlaceTextEditor.Toolbar {
+        InPlaceTextEditor.Toolbar(
+            bold: { state.toggleBold(in: &presentation) },
+            italic: { state.toggleItalic(in: &presentation) },
+            underline: { state.toggleUnderline(in: &presentation) },
+            bullets: {
+                let current = state.listStyle(in: presentation)
+                state.setListStyle(current == .bullets ? .none : .bullets, in: &presentation)
+            },
+            numbers: {
+                let current = state.listStyle(in: presentation)
+                state.setListStyle(current == .numbers ? .none : .numbers, in: &presentation)
+            },
+            outdent: { state.changeIndent(by: -1, in: &presentation) },
+            indent: { state.changeIndent(by: 1, in: &presentation) },
+            format: { state.presentedPanel = .text },
+            done: { state.endEditingText() }
+        )
     }
 
     // MARK: - Typing
@@ -132,23 +204,7 @@ struct SlideCanvas: View {
             anchor: properties.anchor ?? .top, selection: state.textSelection,
             onChange: { state.setTextBody($0, in: &presentation) },
             onSelectionChange: { state.textSelection = $0 },
-            toolbar: InPlaceTextEditor.Toolbar(
-                bold: { state.toggleBold(in: &presentation) },
-                italic: { state.toggleItalic(in: &presentation) },
-                underline: { state.toggleUnderline(in: &presentation) },
-                bullets: {
-                    let current = state.listStyle(in: presentation)
-                    state.setListStyle(current == .bullets ? .none : .bullets, in: &presentation)
-                },
-                numbers: {
-                    let current = state.listStyle(in: presentation)
-                    state.setListStyle(current == .numbers ? .none : .numbers, in: &presentation)
-                },
-                outdent: { state.changeIndent(by: -1, in: &presentation) },
-                indent: { state.changeIndent(by: 1, in: &presentation) },
-                format: { state.presentedPanel = .text },
-                done: { state.endEditingText() }
-            )
+            toolbar: textToolbar
         )
         .frame(width: max(area.width * scale, 1), height: max(area.height * scale, 1))
         .offset(x: (area.minX - frame.minX) * scale, y: (area.minY - frame.minY) * scale)
@@ -188,7 +244,10 @@ struct SlideCanvas: View {
         let doubleTap = SpatialTapGesture(count: 2).onEnded { value in
             let point = CGPoint(x: value.location.x / scale, y: value.location.y / scale)
             guard let shape = shape(at: point, on: slide, scale: scale) else { return }
-            if shape.canHoldText, shape.isEditable, slide.canEditShapes {
+            if case .table(let table) = shape.kind, shape.isEditable, slide.canEditShapes {
+                state.selectedShapeID = shape.id
+                state.selectCell(tableLayout(table, shape: shape, on: slide).cell(at: point), editing: true)
+            } else if shape.canHoldText, shape.isEditable, slide.canEditShapes {
                 state.beginEditingText(shape.id)
             } else {
                 state.selectedShapeID = shape.id
@@ -199,6 +258,12 @@ struct SlideCanvas: View {
             let hit = shape(at: point, on: slide, scale: scale)
             // A tap in the shape being typed into belongs to the text.
             if let editing = state.editingTextShapeID, hit?.id == editing { return }
+            // A tap in a selected table picks a cell.
+            if let hit, hit.id == state.selectedShapeID, !state.isSelectingMultiple, case .table(let table) = hit.kind {
+                let cell = tableLayout(table, shape: hit, on: slide).cell(at: point)
+                if cell != state.selectedCell { state.selectCell(cell, editing: state.isEditingCell) }
+                return
+            }
             if state.isSelectingMultiple || Self.isShiftHeld {
                 if let hit { state.toggleSelection(hit.id) }
             } else {

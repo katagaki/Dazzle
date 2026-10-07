@@ -263,12 +263,15 @@ final class ShapeParser {
                         fill: Fill.parse(in: cellProperties, image: target(of:)),
                         columnSpan: cell.attribute("gridSpan").flatMap(Int.init) ?? 1,
                         rowSpan: cell.attribute("rowSpan").flatMap(Int.init) ?? 1,
-                        isMerged: cell.attribute("hMerge") == "1" || cell.attribute("vMerge") == "1",
+                        isHorizontalMerge: cell.attribute("hMerge") == "1",
+                        isVerticalMerge: cell.attribute("vMerge") == "1",
                         anchor: cellProperties?.attribute("anchor").flatMap(BodyProperties.Anchor.init(rawValue:)),
                         marginLeft: margin("marL"), marginRight: margin("marR"),
                         marginTop: margin("marT"), marginBottom: margin("marB"),
                         borderLeft: border("lnL"), borderRight: border("lnR"),
-                        borderTop: border("lnT"), borderBottom: border("lnB")
+                        borderTop: border("lnT"), borderBottom: border("lnB"),
+                        sourceProperties: cellProperties.flatMap(capture),
+                        sourceBody: cell.firstChild(named: "txBody").flatMap(capture)
                     )
                 }
             )
@@ -277,7 +280,8 @@ final class ShapeParser {
             columnWidths: widths, rows: rows,
             hasHeaderRow: properties?.attribute("firstRow") == "1",
             hasBandedRows: properties?.attribute("bandRow") == "1",
-            styleID: properties?.firstChild(named: "tableStyleId")?.text.trimmed.nilIfEmpty
+            styleID: properties?.firstChild(named: "tableStyleId")?.text.trimmed.nilIfEmpty,
+            sourceProperties: properties.flatMap(capture)
         )
     }
 

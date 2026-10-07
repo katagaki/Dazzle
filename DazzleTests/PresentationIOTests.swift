@@ -616,3 +616,76 @@ struct RichTextTests {
         #expect(paragraph.indent == -342_900)
     }
 }
+
+@Suite("Tables")
+@MainActor
+struct TableEditingTests {
+    private func reread(_ presentation: Presentation) throws -> Presentation {
+        try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+    }
+
+    @Test("A new table is written, with its cell text, and grows a row")
+    func newTable() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.insertTable(rows: 2, columns: 3, in: &presentation)
+        state.selectCell(TableCellPosition(row: 1, column: 2), editing: true)
+        state.setCellText(TextBody(paragraphs: [Paragraph(runs: [TextRun(text: "42")])]), in: &presentation)
+        state.changeTable(.rowBelow, in: &presentation)
+
+        let copy = try reread(presentation)
+        guard case .table(let table) = try #require(copy.slides[0].shapes.last).kind else {
+            Issue.record("Expected a table")
+            return
+        }
+        #expect(table.rows.count == 3)
+        #expect(table.columnCount == 3)
+        #expect(table.rows[1].cells[2].text?.plainText == "42")
+        #expect(table.rows[2].cells[2].text?.plainText == "")
+        #expect(table.hasHeaderRow)
+        #expect(table.styleID == "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}")
+        #expect(copy.slides[0].shapes.last?.frame.height == table.gridSize.height)
+    }
+
+    @Test("Rows added inside a merge widen it; deleting its first row hands it on")
+    func merges() {
+        var table = SlideTable.empty(rows: 3, columns: 2, width: 200, height: 300)
+        table.rows[0].cells[0].rowSpan = 2
+        table.rows[1].cells[0].isVerticalMerge = true
+        table.rows[0].cells[0].text = TextBody(paragraphs: [Paragraph(runs: [TextRun(text: "Merged")])])
+
+        table.insertRow(at: 1, copying: 0)
+        #expect(table.rows[0].cells[0].rowSpan == 3)
+        #expect(table.rows[1].cells[0].isVerticalMerge)
+
+        table.deleteRow(at: 0)
+        #expect(table.rows[0].cells[0].rowSpan == 2)
+        #expect(!table.rows[0].cells[0].isVerticalMerge)
+        #expect(table.rows[0].cells[0].text?.plainText == "Merged")
+        #expect(table.anchor(of: TableCellPosition(row: 1, column: 0)) == TableCellPosition(row: 0, column: 0))
+    }
+
+    @Test("An edited table read from a file keeps what Dazzle does not model")
+    func preservesSource() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.insertTable(rows: 2, columns: 2, in: &presentation)
+        var copy = try reread(presentation)
+        let reopened = EditorState()
+        reopened.selectSlide(copy.slides[0].id)
+        reopened.selectedShapeID = copy.slides[0].shapes.last?.id
+        reopened.selectCell(TableCellPosition(row: 0, column: 0))
+        reopened.setCellFill(.solid(.rgb(0xFF0000)), in: &copy)
+        reopened.changeTable(.columnRight, in: &copy)
+        let final = try reread(copy)
+        guard case .table(let table) = try #require(final.slides[0].shapes.last).kind else {
+            Issue.record("Expected a table")
+            return
+        }
+        #expect(table.columnCount == 3)
+        #expect(table.rows[0].cells[0].fill == .solid(.rgb(0xFF0000)))
+        #expect(table.rows[0].cells[1].fill == .solid(.rgb(0xFF0000)))
+    }
+}

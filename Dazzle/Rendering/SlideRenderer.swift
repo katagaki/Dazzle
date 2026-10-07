@@ -13,6 +13,8 @@ struct SlideRenderer {
         /// Draw only this shape's bullets and numbers, leaving its text out,
         /// while the text is being typed over the slide.
         var bulletsOnlyShapeID: SlideShape.ID?
+        /// Leave out the text of the table cell being typed into.
+        var editingCell: TableEditingCell?
         /// Draw the background and the master's and layout's artwork. Off,
         /// the slide's own shapes are drawn on nothing, for a picture of them alone.
         var drawsBackground = true
@@ -403,113 +405,51 @@ struct SlideRenderer {
 
     private func drawTable(_ table: SlideTable, shape: SlideShape, frame: CGRect, style: SlideStyleContext, context: CGContext) {
         let renderer = TextRenderer(style: style, slideNumber: slideNumber)
-        let widths = table.columnWidths.map { CGFloat(EMU.points($0)) }
-        var columnStarts: [CGFloat] = [frame.minX]
-        for width in widths { columnStarts.append((columnStarts.last ?? frame.minX) + width) }
-
-        // A style the file defines is drawn as defined. One it only names is
-        // one of Office's built-in styles, drawn as their common look: an
-        // accent header and banded tints. A table naming none has no style.
-        let tableStyle = table.styleID.flatMap { presentation.resources.tableStyles[$0] }
-        let usesBuiltInLook = table.styleID != nil && tableStyle == nil
+        let layout = TableLayout(table: table, frame: frame, style: style, presentation: presentation, slideNumber: slideNumber)
         let accent = style.color(.scheme("accent1"))
 
-        func isHeader(_ row: Int) -> Bool { table.hasHeaderRow && row == 0 }
-        func isBanded(_ row: Int) -> Bool {
-            table.hasBandedRows && (row - (table.hasHeaderRow ? 1 : 0)).isMultiple(of: 2)
-        }
-        func columnSpanWidth(_ column: Int, _ span: Int) -> CGFloat {
-            let last = min(column + span, widths.count)
-            return columnStarts[last] - columnStarts[column]
-        }
-        func body(for cell: SlideTable.Cell, row: Int) -> TextBody? {
-            guard var body = cell.text, !body.isEmpty else { return nil }
-            body.properties.leftInset = cell.marginLeft ?? 91_440
-            body.properties.rightInset = cell.marginRight ?? 91_440
-            body.properties.topInset = cell.marginTop ?? 45_720
-            body.properties.bottomInset = cell.marginBottom ?? 45_720
-            if body.properties.anchor == nil { body.properties.anchor = cell.anchor }
-            var color: DrawingColor?
-            var bold: Bool?
-            if let tableStyle {
-                let part = isHeader(row) ? tableStyle.headerRow : tableStyle.whole
-                color = part.textColor ?? tableStyle.whole.textColor
-                bold = part.isBold
-            } else if usesBuiltInLook, isHeader(row), cell.fill == nil {
-                color = .scheme("lt1")
-                bold = true
-            }
-            if color != nil || bold != nil {
-                body.updateRuns { run in
-                    if run.isBold == nil, let bold { run.isBold = bold }
-                    if run.color == nil, let color { run.color = color }
-                }
-            }
-            return body
-        }
-        func cellShape(_ body: TextBody, _ rect: CGRect) -> SlideShape {
-            var cellShape = SlideShape(shapeID: 0, name: "", kind: .shape, frame: EMURect(points: rect))
-            cellShape.text = body
-            return cellShape
-        }
-
-        // Rows are as tall as the file says, or as their text needs.
-        var heights = table.rows.map { CGFloat(EMU.points($0.height)) }
         for (rowIndex, row) in table.rows.enumerated() {
-            for (columnIndex, cell) in row.cells.enumerated()
-            where !cell.isMerged && cell.rowSpan == 1 && columnIndex < widths.count {
-                guard let body = body(for: cell, row: rowIndex) else { continue }
-                let width = columnSpanWidth(columnIndex, cell.columnSpan)
-                let needed = renderer.height(of: body, shape: cellShape(body, CGRect(x: 0, y: 0, width: width, height: 1)), width: width)
-                heights[rowIndex] = max(heights[rowIndex], needed)
-            }
-        }
-        var rowStarts: [CGFloat] = [frame.minY]
-        for height in heights { rowStarts.append((rowStarts.last ?? frame.minY) + height) }
-
-        for (rowIndex, row) in table.rows.enumerated() {
-            for (columnIndex, cell) in row.cells.enumerated() where !cell.isMerged && columnIndex < widths.count {
-                let lastRow = min(rowIndex + cell.rowSpan, table.rows.count)
-                let rect = CGRect(
-                    x: columnStarts[columnIndex], y: rowStarts[rowIndex],
-                    width: columnSpanWidth(columnIndex, cell.columnSpan), height: rowStarts[lastRow] - rowStarts[rowIndex]
-                )
+            for (columnIndex, cell) in row.cells.enumerated() where !cell.isMerged && columnIndex < layout.columnCount {
+                let position = TableCellPosition(row: rowIndex, column: columnIndex)
+                let rect = layout.rect(of: position)
                 let path = CGPath(rect: rect, transform: nil)
 
                 var fill = cell.fill
-                if fill == nil, let tableStyle {
-                    fill = isHeader(rowIndex) ? tableStyle.headerRow.fill
-                        : (isBanded(rowIndex) ? tableStyle.bandedRow.fill : nil)
+                if fill == nil, let tableStyle = layout.tableStyle {
+                    fill = layout.isHeader(rowIndex) ? tableStyle.headerRow.fill
+                        : (layout.isBanded(rowIndex) ? tableStyle.bandedRow.fill : nil)
                     fill = fill ?? tableStyle.whole.fill
                 }
                 if let fill {
                     paint(fill, in: path, bounds: rect, placeholderColor: nil, style: style, context: context)
-                } else if usesBuiltInLook {
-                    let tint = isHeader(rowIndex) ? accent
-                        : accent.applying(.init(name: "tint", value: isBanded(rowIndex) ? 40_000 : 20_000))
+                } else if layout.usesBuiltInLook {
+                    let tint = layout.isHeader(rowIndex) ? accent
+                        : accent.applying(.init(name: "tint", value: layout.isBanded(rowIndex) ? 40_000 : 20_000))
                     context.setFillColor(tint.cgColor)
                     context.fill(rect)
                 }
 
-                if let body = body(for: cell, row: rowIndex) {
-                    renderer.draw(body, shape: cellShape(body, rect), sources: [], in: rect, context: context)
+                if options.editingCell != TableEditingCell(shapeID: shape.id, position: position),
+                   let body = layout.body(for: cell, row: rowIndex) {
+                    renderer.draw(body, shape: TableLayout.cellShape(body, rect), sources: [], in: rect, context: context)
                 }
 
                 // The style's border for an edge: the outer edges of the table
                 // use its own, those between cells its inside lines, and a
                 // header or band row's borders override the whole table's.
-                let lastColumn = columnIndex + cell.columnSpan >= widths.count
+                let lastRow = min(rowIndex + cell.rowSpan, table.rows.count)
+                let lastColumn = columnIndex + cell.columnSpan >= layout.columnCount
                 let edgeNames = [
                     rowIndex == 0 ? "top" : "insideH", lastRow >= table.rows.count ? "bottom" : "insideH",
                     columnIndex == 0 ? "left" : "insideV", lastColumn ? "right" : "insideV",
                 ]
                 func styleBorder(_ name: String) -> LineStyle? {
-                    if let tableStyle {
-                        let part = isHeader(rowIndex) ? tableStyle.headerRow
-                            : (isBanded(rowIndex) ? tableStyle.bandedRow : TableStyle.Part())
+                    if let tableStyle = layout.tableStyle {
+                        let part = layout.isHeader(rowIndex) ? tableStyle.headerRow
+                            : (layout.isBanded(rowIndex) ? tableStyle.bandedRow : TableStyle.Part())
                         return part.borders[name] ?? tableStyle.whole.borders[name]
                     }
-                    return usesBuiltInLook ? LineStyle(fill: .solid(.scheme("lt1")), width: 12_700) : nil
+                    return layout.usesBuiltInLook ? LineStyle(fill: .solid(.scheme("lt1")), width: 12_700) : nil
                 }
                 let edges: [(LineStyle?, String, CGPoint, CGPoint)] = [
                     (cell.borderTop, edgeNames[0], CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY)),
@@ -572,5 +512,135 @@ struct SlideRenderer {
         context.textPosition = CGPoint(x: frame.midX - bounds.width / 2, y: y)
         CTLineDraw(line, context)
         context.restoreGState()
+    }
+}
+
+/// A table cell being typed into, for the renderer to leave blank.
+struct TableEditingCell: Equatable, Hashable, Sendable {
+    var shapeID: SlideShape.ID
+    var position: TableCellPosition
+}
+
+/// Where a table's cells fall, and what their text looks like: rows as tall
+/// as the file says or as their text needs, columns as wide as the grid says.
+struct TableLayout {
+    let table: SlideTable
+    let frame: CGRect
+    let style: SlideStyleContext
+    /// A style the file defines is drawn as defined. One it only names is
+    /// one of Office's built-in styles, drawn as their common look: an
+    /// accent header and banded tints. A table naming none has no style.
+    let tableStyle: TableStyle?
+    let usesBuiltInLook: Bool
+    let columnStarts: [CGFloat]
+    private(set) var rowStarts: [CGFloat] = []
+
+    var columnCount: Int { table.columnCount }
+
+    init(table: SlideTable, frame: CGRect, style: SlideStyleContext, presentation: Presentation, slideNumber: Int) {
+        self.table = table
+        self.frame = frame
+        self.style = style
+        tableStyle = table.styleID.flatMap { presentation.resources.tableStyles[$0] }
+        usesBuiltInLook = table.styleID != nil && tableStyle == nil
+        var columns: [CGFloat] = [frame.minX]
+        for width in table.columnWidths { columns.append((columns.last ?? frame.minX) + CGFloat(EMU.points(width))) }
+        columnStarts = columns
+
+        let renderer = TextRenderer(style: style, slideNumber: slideNumber)
+        var heights = table.rows.map { CGFloat(EMU.points($0.height)) }
+        for (rowIndex, row) in table.rows.enumerated() {
+            for (columnIndex, cell) in row.cells.enumerated()
+            where !cell.isMerged && cell.rowSpan == 1 && columnIndex < table.columnCount {
+                guard let body = body(for: cell, row: rowIndex) else { continue }
+                let width = spanWidth(columnIndex, cell.columnSpan)
+                let needed = renderer.height(
+                    of: body, shape: Self.cellShape(body, CGRect(x: 0, y: 0, width: width, height: 1)), width: width
+                )
+                heights[rowIndex] = max(heights[rowIndex], needed)
+            }
+        }
+        var rows: [CGFloat] = [frame.minY]
+        for height in heights { rows.append((rows.last ?? frame.minY) + height) }
+        rowStarts = rows
+    }
+
+    func isHeader(_ row: Int) -> Bool { table.hasHeaderRow && row == 0 }
+
+    func isBanded(_ row: Int) -> Bool {
+        table.hasBandedRows && (row - (table.hasHeaderRow ? 1 : 0)).isMultiple(of: 2)
+    }
+
+    private func spanWidth(_ column: Int, _ span: Int) -> CGFloat {
+        let last = min(column + span, table.columnCount)
+        return columnStarts[last] - columnStarts[column]
+    }
+
+    /// The rectangle a cell, with whatever it spans, covers.
+    func rect(of position: TableCellPosition) -> CGRect {
+        let span = table.cell(at: position).map { ($0.columnSpan, $0.rowSpan) } ?? (1, 1)
+        let column = min(position.column, table.columnCount - 1)
+        let lastRow = min(position.row + span.1, table.rows.count)
+        return CGRect(
+            x: columnStarts[column], y: rowStarts[position.row],
+            width: spanWidth(column, span.0), height: rowStarts[lastRow] - rowStarts[position.row]
+        )
+    }
+
+    /// The cell showing at a point in slide space: the anchor of a merge.
+    func cell(at point: CGPoint) -> TableCellPosition? {
+        guard let column = columnStarts.indices.dropLast().last(where: { columnStarts[$0] <= point.x }),
+              let row = rowStarts.indices.dropLast().last(where: { rowStarts[$0] <= point.y }),
+              point.x <= columnStarts.last ?? 0, point.y <= rowStarts.last ?? 0 else { return nil }
+        return table.anchor(of: TableCellPosition(row: row, column: column))
+    }
+
+    /// A cell's text, with its margins and the style's text colour and weight.
+    func body(for cell: SlideTable.Cell, row: Int, includeEmpty: Bool = false) -> TextBody? {
+        guard var body = cell.text, includeEmpty || !body.isEmpty else { return nil }
+        body.properties.leftInset = cell.marginLeft ?? 91_440
+        body.properties.rightInset = cell.marginRight ?? 91_440
+        body.properties.topInset = cell.marginTop ?? 45_720
+        body.properties.bottomInset = cell.marginBottom ?? 45_720
+        if body.properties.anchor == nil { body.properties.anchor = cell.anchor }
+        var color: DrawingColor?
+        var bold: Bool?
+        if let tableStyle {
+            let part = isHeader(row) ? tableStyle.headerRow : tableStyle.whole
+            color = part.textColor ?? tableStyle.whole.textColor
+            bold = part.isBold
+        } else if usesBuiltInLook, isHeader(row), cell.fill == nil {
+            color = .scheme("lt1")
+            bold = true
+        }
+        if color != nil || bold != nil {
+            body.updateRuns { run in
+                if run.isBold == nil, let bold { run.isBold = bold }
+                if run.color == nil, let color { run.color = color }
+            }
+        }
+        return body
+    }
+
+    /// A shape whose text style gives a row's cells the style's text colour
+    /// and weight, for typing into a cell without writing them into it.
+    func styleSource(forRow row: Int) -> SlideShape {
+        var properties = ParagraphProperties()
+        let empty = SlideTable.Cell(text: TextBody(paragraphs: [Paragraph(runs: [])]))
+        if let styled = body(for: empty, row: row, includeEmpty: true)?.paragraphs.first?.endProperties {
+            properties.defaultRun = styled
+        }
+        var list = ListStyle()
+        for level in 1...9 { list.levels[level] = properties }
+        var shape = SlideShape(shapeID: 0, name: "", kind: .shape, frame: .zero)
+        shape.text = TextBody(listStyle: list, paragraphs: [])
+        return shape
+    }
+
+    /// A stand-in shape holding a cell's text, for laying it out.
+    static func cellShape(_ body: TextBody, _ rect: CGRect) -> SlideShape {
+        var shape = SlideShape(shapeID: 0, name: "", kind: .shape, frame: EMURect(points: rect))
+        shape.text = body
+        return shape
     }
 }

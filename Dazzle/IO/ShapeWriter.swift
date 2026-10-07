@@ -17,7 +17,7 @@ struct ShapeWriter {
     mutating func xml(for shape: SlideShape) -> String? {
         if shape.edits.isEmpty, let source = shape.source { return source }
         guard let element = element(for: shape) else { return shape.source }
-        let edits: Set<SlideShape.Edit> = shape.source == nil ? [.transform, .fill, .line, .text] : shape.edits
+        let edits: Set<SlideShape.Edit> = shape.source == nil ? [.transform, .fill, .line, .text, .table] : shape.edits
         if edits.contains(.transform), shape.hasOwnFrame || shape.source != nil {
             writeTransform(of: shape, into: element)
         }
@@ -29,6 +29,9 @@ struct ShapeWriter {
         }
         if edits.contains(.text), let text = shape.text {
             writeText(text, into: element)
+        }
+        if edits.contains(.table), case .table(let table) = shape.kind {
+            writeTable(table, into: element)
         }
         if edits.contains(.identity), shape.source != nil {
             writeIdentity(of: shape, into: element)
@@ -66,6 +69,13 @@ struct ShapeWriter {
                 <p:grpSp><p:nvGrpSpPr>\(identity)<p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm>\
                 <a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm>\
                 </p:grpSpPr>\(members)</p:grpSp>
+                """
+        case .table:
+            return """
+                <p:graphicFrame><p:nvGraphicFramePr>\(identity)<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/>\
+                </p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>\
+                </p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl>\
+                <a:tblPr/><a:tblGrid/></a:tbl></a:graphicData></a:graphic></p:graphicFrame>
                 """
         case .picture(let picture):
             let reference = relationshipID(forImage: picture.imagePath ?? "")
@@ -238,6 +248,83 @@ struct ShapeWriter {
                 body.insertChild(element, at: body.children.count)
             }
         }
+    }
+
+    // MARK: - Tables
+
+    /// Writes the table's grid, rows and cells from the model, each cell
+    /// starting from the XML it was read with.
+    private func writeTable(_ table: SlideTable, into element: XMLElement) {
+        guard let data = element.firstChild(named: "graphic")?.firstChild(named: "graphicData"),
+              let grid = data.firstChild(named: "tbl") else { return }
+        let properties = table.sourceProperties.flatMap(fragment) ?? grid.firstChild(named: "tblPr") ?? fragment("<a:tblPr/>")
+        guard let properties else { return }
+        properties.setAttribute("firstRow", table.hasHeaderRow ? "1" : nil)
+        properties.setAttribute("bandRow", table.hasBandedRows ? "1" : nil)
+        if let styleID = table.styleID, properties.firstChild(named: "tableStyleId") == nil,
+           let style = fragment("<a:tableStyleId>\(XMLLite.escape(styleID))</a:tableStyleId>") {
+            properties.insertChild(style, at: properties.children.count)
+        }
+        let extensions = grid.firstChild(named: "extLst")
+        for child in grid.children { grid.removeChild(child) }
+        grid.insertChild(properties, at: 0)
+        let columns = table.columnWidths.map { "<a:gridCol w=\"\($0)\"/>" }.joined()
+        if let gridColumns = fragment("<a:tblGrid>\(columns)</a:tblGrid>") {
+            grid.insertChild(gridColumns, at: grid.children.count)
+        }
+        for row in table.rows {
+            guard let rowElement = fragment("<a:tr h=\"\(row.height)\"/>") else { continue }
+            for cell in row.cells {
+                if let cellElement = cellElement(cell) { rowElement.insertChild(cellElement, at: rowElement.children.count) }
+            }
+            grid.insertChild(rowElement, at: grid.children.count)
+        }
+        if let extensions { grid.insertChild(extensions, at: grid.children.count) }
+    }
+
+    private func cellElement(_ cell: SlideTable.Cell) -> XMLElement? {
+        guard let element = fragment("<a:tc/>") else { return nil }
+        element.setAttribute("gridSpan", cell.columnSpan > 1 ? String(cell.columnSpan) : nil)
+        element.setAttribute("rowSpan", cell.rowSpan > 1 ? String(cell.rowSpan) : nil)
+        element.setAttribute("hMerge", cell.isHorizontalMerge ? "1" : nil)
+        element.setAttribute("vMerge", cell.isVerticalMerge ? "1" : nil)
+
+        let body = cell.sourceBody.flatMap(fragment) ?? fragment("<a:txBody><a:bodyPr/><a:lstStyle/></a:txBody>")
+        if let body {
+            for paragraph in body.children(named: "p") { body.removeChild(paragraph) }
+            let paragraphs = cell.text?.paragraphs.nilIfEmpty ?? [Paragraph(runs: [])]
+            for paragraph in paragraphs {
+                if let paragraphElement = fragment(paragraphXML(paragraph)) {
+                    body.insertChild(paragraphElement, at: body.children.count)
+                }
+            }
+            element.insertChild(body, at: element.children.count)
+        }
+
+        let properties = cell.sourceProperties.flatMap(fragment) ?? fragment("<a:tcPr/>")
+        if let properties {
+            func margin(_ key: String, _ value: Int?) {
+                if let value { properties.setAttribute(key, String(value)) }
+            }
+            margin("marL", cell.marginLeft)
+            margin("marR", cell.marginRight)
+            margin("marT", cell.marginTop)
+            margin("marB", cell.marginBottom)
+            if let anchor = cell.anchor { properties.setAttribute("anchor", anchor.rawValue) }
+            // A picture fill is left as the file had it; others are written as they now are.
+            switch cell.fill {
+            case .picture?, .tiledPicture?:
+                break
+            default:
+                for child in properties.children where Fill.elementNames.contains(child.name) { properties.removeChild(child) }
+                if let fill = cell.fill, let fillElement = fragment(fill.xml) {
+                    let before = properties.children.firstIndex { ["headers", "extLst"].contains($0.name) }
+                    properties.insertChild(fillElement, at: before ?? properties.children.count)
+                }
+            }
+            element.insertChild(properties, at: element.children.count)
+        }
+        return element
     }
 
     // MARK: - Paragraphs

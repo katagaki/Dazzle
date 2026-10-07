@@ -7,8 +7,12 @@ struct SlideTable: Equatable, Hashable, Sendable {
         var fill: Fill?
         var columnSpan = 1
         var rowSpan = 1
+        /// `hMerge`: covered by the span of the cell to its left.
+        var isHorizontalMerge = false
+        /// `vMerge`: covered by the span of the cell above.
+        var isVerticalMerge = false
         /// Covered by a neighbour's span, so not drawn on its own.
-        var isMerged = false
+        var isMerged: Bool { isHorizontalMerge || isVerticalMerge }
         var anchor: BodyProperties.Anchor?
         /// EMU; `nil` where the cell does not say.
         var marginLeft: Int?
@@ -20,6 +24,10 @@ struct SlideTable: Equatable, Hashable, Sendable {
         var borderRight: LineStyle?
         var borderTop: LineStyle?
         var borderBottom: LineStyle?
+        /// The cell's `a:tcPr` and `a:txBody` as the file wrote them, so
+        /// what Dazzle does not model survives a rewrite.
+        var sourceProperties: String?
+        var sourceBody: String?
     }
 
     struct Row: Equatable, Hashable, Sendable {
@@ -36,6 +44,8 @@ struct SlideTable: Equatable, Hashable, Sendable {
     var hasBandedRows: Bool
     /// `a:tableStyleId`; a table without one has no style at all.
     var styleID: String?
+    /// `a:tblPr` as the file wrote it.
+    var sourceProperties: String?
 }
 
 /// The parts of a table style Dazzle draws: fills, text colour and weight,

@@ -218,6 +218,9 @@ struct FormatPanel: View {
                 }
             }
         }
+        if case .table(let table) = shape.kind {
+            tableSections(table)
+        }
         if case .shape = shape.kind {
             outlineSection(shape)
         } else if case .connector = shape.kind {
@@ -254,6 +257,31 @@ struct FormatPanel: View {
                     .accessibilityIdentifier("rotation")
                 }
                 RotateAndFlipButtons(presentation: $presentation, state: state)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tableSections(_ table: SlideTable) -> some View {
+        Section("Format.Section.Table") {
+            Toggle("Table.HeaderRow", isOn: Binding(
+                get: { table.hasHeaderRow },
+                set: { state.setTableHeaderRow($0, in: &presentation) }
+            ))
+            Toggle("Table.BandedRows", isOn: Binding(
+                get: { table.hasBandedRows },
+                set: { state.setTableBandedRows($0, in: &presentation) }
+            ))
+        }
+        if let position = state.selectedCell, let cell = table.cell(at: position) {
+            Section("Format.Section.CellFill") {
+                ColorSwatches(
+                    identifier: "cellFill", choices: themeChoices + ColorChoice.system,
+                    selected: { if case .solid(let color) = cell.fill { return color } else { return nil } }(),
+                    allowsNone: true, isNoneSelected: cell.fill == Fill.none
+                ) { color in
+                    state.setCellFill(color.map(Fill.solid) ?? Fill.none, in: &presentation)
+                }
             }
         }
     }

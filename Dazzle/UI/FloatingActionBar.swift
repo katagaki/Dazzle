@@ -58,6 +58,7 @@ struct FloatingActionBar: View {
             }
             .accessibilityIdentifier("insertTextBox")
             shapeMenu
+            tableMenu
             PhotosPicker(selection: $photo, matching: .images) {
                 ActionSymbol(name: "photo", isOn: false)
             }
@@ -104,6 +105,15 @@ struct FloatingActionBar: View {
                 panelAction("textformat", label: "ActionBar.TextFormat", panel: .text)
                     .accessibilityIdentifier("textFormat")
             }
+            if case .table = shape.kind, shape.isEditable, !state.hasMultipleSelection {
+                TableMenu(presentation: $presentation, state: state) {
+                    ActionSymbol(name: "tablecells", isOn: false)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("tableActions")
+                .accessibilityLabel("ActionBar.Table")
+            }
             if shape.isEditable {
                 AlignMenu(presentation: $presentation, state: state) {
                     ActionSymbol(name: "align.horizontal.left", isOn: false)
@@ -143,6 +153,26 @@ struct FloatingActionBar: View {
         .accessibilityIdentifier("insertShape")
         .accessibilityLabel("ActionBar.Shape")
     }
+
+    /// A new table, by size.
+    private var tableMenu: some View {
+        Menu {
+            ForEach(Self.tableSizes, id: \.self) { size in
+                Button(String(format: String(localized: "Table.Size"), size[1], size[0])) {
+                    state.insertTable(rows: size[0], columns: size[1], in: &presentation)
+                }
+            }
+        } label: {
+            ActionSymbol(name: "tablecells", isOn: false)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("insertTable")
+        .accessibilityLabel("ActionBar.Table")
+    }
+
+    /// Rows by columns.
+    private static let tableSizes = [[2, 2], [3, 2], [3, 3], [4, 3], [4, 4], [5, 4], [6, 5]]
 
     /// Copy, cut and paste: the selected shapes, or with none, the slide.
     private var editMenu: some View {
@@ -231,6 +261,57 @@ struct FloatingActionBar: View {
             return
         }
         state.insertPicture(media, in: &presentation)
+    }
+}
+
+/// Rows and columns added and removed around the picked cell, and the
+/// table's header and banding.
+struct TableMenu<Label: View>: View {
+    @Binding var presentation: Presentation
+    @Bindable var state: EditorState
+    @ViewBuilder var label: () -> Label
+
+    var body: some View {
+        Menu {
+            TableButtons(presentation: $presentation, state: state)
+        } label: {
+            label()
+        }
+    }
+}
+
+struct TableButtons: View {
+    @Binding var presentation: Presentation
+    @Bindable var state: EditorState
+
+    var body: some View {
+        let table = state.selectedTable(in: presentation)
+        Section {
+            Button("Table.RowAbove", systemImage: "arrow.up.to.line") { state.changeTable(.rowAbove, in: &presentation) }
+            Button("Table.RowBelow", systemImage: "arrow.down.to.line") { state.changeTable(.rowBelow, in: &presentation) }
+            Button("Table.ColumnLeft", systemImage: "arrow.left.to.line") { state.changeTable(.columnLeft, in: &presentation) }
+            Button("Table.ColumnRight", systemImage: "arrow.right.to.line") { state.changeTable(.columnRight, in: &presentation) }
+        }
+        Section {
+            Button("Table.DeleteRow", systemImage: "minus.rectangle", role: .destructive) {
+                state.changeTable(.deleteRow, in: &presentation)
+            }
+            .disabled((table?.rows.count ?? 0) < 2)
+            Button("Table.DeleteColumn", systemImage: "minus.rectangle.portrait", role: .destructive) {
+                state.changeTable(.deleteColumn, in: &presentation)
+            }
+            .disabled((table?.columnCount ?? 0) < 2)
+        }
+        Section {
+            Toggle("Table.HeaderRow", isOn: Binding(
+                get: { table?.hasHeaderRow ?? false },
+                set: { state.setTableHeaderRow($0, in: &presentation) }
+            ))
+            Toggle("Table.BandedRows", isOn: Binding(
+                get: { table?.hasBandedRows ?? false },
+                set: { state.setTableBandedRows($0, in: &presentation) }
+            ))
+        }
     }
 }
 

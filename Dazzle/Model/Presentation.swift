@@ -152,6 +152,10 @@ extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
+extension Array {
+    var nilIfEmpty: [Element]? { isEmpty ? nil : self }
+}
+
 /// The parts of a file Dazzle shows but cannot edit, or keeps but cannot use.
 struct UnsupportedFeatureReport: Equatable, Sendable {
     enum Feature: String, CaseIterable, Sendable {

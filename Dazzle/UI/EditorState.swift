@@ -35,6 +35,10 @@ final class EditorState {
     var editingTextShapeID: SlideShape.ID?
     /// What is selected in the text being typed, as UTF-16 offsets.
     var textSelection: NSRange?
+    /// The cell picked in the selected table.
+    var selectedCell: TableCellPosition?
+    /// Whether the picked cell's text is being typed into.
+    var isEditingCell = false
     var presentedPanel: EditorPanel?
     /// Freehand drawing over the slide, which becomes a picture when done.
     var isDrawing = false
@@ -58,6 +62,10 @@ final class EditorState {
     var selectedShapeID: SlideShape.ID? {
         get { selectedShapeIDs.last }
         set {
+            if newValue != selectedShapeIDs.last {
+                selectedCell = nil
+                isEditingCell = false
+            }
             selectedShapeIDs = newValue.map { [$0] } ?? []
             if newValue == nil { isSelectingMultiple = false }
             if newValue != editingTextShapeID { endEditingText() }
@@ -413,6 +421,110 @@ final class EditorState {
         setFrames(frames, in: &presentation)
     }
 
+    // MARK: - Tables
+
+    /// Adds a table of empty cells in the middle of the slide.
+    func insertTable(rows: Int, columns: Int, in presentation: inout Presentation) {
+        guard let slide = selectedSlide(in: presentation) else { return }
+        let bounds = presentation.slideSize.points
+        let size = CGSize(width: bounds.width * 0.7, height: min(CGFloat(rows) * 37, bounds.height * 0.7))
+        let frame = centered(size, in: presentation)
+        let table = SlideTable.empty(rows: rows, columns: columns, width: frame.width, height: frame.height)
+        let shape = SlideShape(shapeID: slide.nextShapeID, name: "Table \(slide.nextShapeID - 1)", kind: .table(table), frame: frame)
+        insert(shape, in: &presentation)
+        selectedCell = TableCellPosition(row: 0, column: 0)
+    }
+
+    func selectedTable(in presentation: Presentation) -> SlideTable? {
+        guard let shape = selectedShape(in: presentation), case .table(let table) = shape.kind else { return nil }
+        return table
+    }
+
+    /// Picks a cell of the selected table, optionally to type into.
+    func selectCell(_ position: TableCellPosition?, editing: Bool = false) {
+        selectedCell = position
+        isEditingCell = editing && position != nil
+        if isEditingCell {
+            editingTextShapeID = nil
+            textSelection = nil
+        }
+    }
+
+    enum TableChange {
+        case rowAbove
+        case rowBelow
+        case columnLeft
+        case columnRight
+        case deleteRow
+        case deleteColumn
+    }
+
+    func changeTable(_ change: TableChange, in presentation: inout Presentation) {
+        let position = selectedCell ?? TableCellPosition(row: 0, column: 0)
+        var next = position
+        updateTable(in: &presentation, resizes: true) { table in
+            switch change {
+            case .rowAbove:
+                table.insertRow(at: position.row, copying: position.row)
+                next.row += 1
+            case .rowBelow:
+                table.insertRow(at: position.row + 1, copying: position.row)
+            case .columnLeft:
+                table.insertColumn(at: position.column, copying: position.column)
+                next.column += 1
+            case .columnRight:
+                table.insertColumn(at: position.column + 1, copying: position.column)
+            case .deleteRow:
+                table.deleteRow(at: position.row)
+                next.row = min(position.row, table.rows.count - 1)
+            case .deleteColumn:
+                table.deleteColumn(at: position.column)
+                next.column = min(position.column, table.columnCount - 1)
+            }
+        }
+        selectCell(next)
+    }
+
+    func setTableHeaderRow(_ isOn: Bool, in presentation: inout Presentation) {
+        updateTable(in: &presentation) { $0.hasHeaderRow = isOn }
+    }
+
+    func setTableBandedRows(_ isOn: Bool, in presentation: inout Presentation) {
+        updateTable(in: &presentation) { $0.hasBandedRows = isOn }
+    }
+
+    func setCellText(_ body: TextBody, in presentation: inout Presentation) {
+        guard let position = selectedCell else { return }
+        updateTable(in: &presentation) { table in
+            guard table.cell(at: position) != nil, table.rows[position.row].cells[position.column].text != body else { return }
+            table.rows[position.row].cells[position.column].text = body
+        }
+    }
+
+    func setCellFill(_ fill: Fill?, in presentation: inout Presentation) {
+        guard let position = selectedCell else { return }
+        updateTable(in: &presentation) { table in
+            guard table.cell(at: position) != nil else { return }
+            table.rows[position.row].cells[position.column].fill = fill
+        }
+    }
+
+    /// Changes the selected table. After rows or columns come and go, its
+    /// frame is made to fit them.
+    private func updateTable(in presentation: inout Presentation, resizes: Bool = false, _ change: (inout SlideTable) -> Void) {
+        updateShape(selectedShapeID, edits: resizes ? [.table, .transform] : [.table], in: &presentation) { shape in
+            guard case .table(var table) = shape.kind else { return }
+            change(&table)
+            shape.kind = .table(table)
+            if resizes {
+                let size = table.gridSize
+                shape.frame.width = size.width
+                shape.frame.height = size.height
+                shape.hasOwnFrame = true
+            }
+        }
+    }
+
     // MARK: - Groups
 
     var canGroupSelection: Bool { selectedShapeIDs.count > 1 }
@@ -466,6 +578,7 @@ final class EditorState {
                 slide.shapes[index].frame = rect
                 slide.shapes[index].hasOwnFrame = true
                 slide.shapes[index].edits.insert(.transform)
+                slide.shapes[index].fitTableToFrame()
             }
         }
     }
@@ -475,6 +588,7 @@ final class EditorState {
         updateShape(id, edits: [.transform], in: &presentation) { shape in
             shape.frame = EMURect(points: frame)
             shape.hasOwnFrame = true
+            shape.fitTableToFrame()
         }
     }
 
@@ -484,6 +598,7 @@ final class EditorState {
             shape.frame = EMURect(points: frame)
             shape.hasOwnFrame = true
             shape.rotation = SlideShape.normalized(rotation)
+            shape.fitTableToFrame()
         }
     }
 
@@ -525,13 +640,42 @@ final class EditorState {
     func endEditingText() {
         editingTextShapeID = nil
         textSelection = nil
+        isEditingCell = false
     }
 
     /// The part of the text being edited that formatting applies to: the
     /// selection while typing, or `nil` for all of it.
     var activeTextRange: NSRange? {
+        if isEditingCell { return textSelection }
         guard let editingTextShapeID, editingTextShapeID == selectedShapeID else { return nil }
         return textSelection
+    }
+
+    /// The text formatting applies to: the cell being typed into, or the
+    /// selected shape's.
+    private func formattedText(in presentation: Presentation) -> TextBody? {
+        if isEditingCell, let position = selectedCell {
+            return selectedTable(in: presentation)?.cell(at: position)?.text
+        }
+        return selectedShape(in: presentation)?.text
+    }
+
+    /// Changes the text formatting applies to.
+    private func updateFormattedText(in presentation: inout Presentation, _ change: (inout TextBody) -> Void) {
+        if isEditingCell, let position = selectedCell {
+            updateTable(in: &presentation) { table in
+                guard table.cell(at: position) != nil else { return }
+                var body = table.rows[position.row].cells[position.column].text ?? TextBody(paragraphs: [Paragraph(runs: [])])
+                change(&body)
+                table.rows[position.row].cells[position.column].text = body
+            }
+            return
+        }
+        updateShape(selectedShapeID, edits: [.text], in: &presentation) { shape in
+            var body = shape.text ?? TextBody(paragraphs: [Paragraph(runs: [])])
+            change(&body)
+            shape.text = body
+        }
     }
 
     /// Replaces the text being typed into. A shape that grows to fit its
@@ -564,7 +708,7 @@ final class EditorState {
             return RunProperties()
         }
         let style = SlideStyleContext(presentation: presentation, slide: slide)
-        let body = shape.text ?? TextBody(paragraphs: [])
+        let body = formattedText(in: presentation) ?? TextBody(paragraphs: [])
         let range = activeTextRange
         let paragraphIndex = range.flatMap { body.paragraphIndices(in: $0).first } ?? 0
         let paragraph = body.paragraphs.indices.contains(paragraphIndex) ? body.paragraphs[paragraphIndex] : nil
@@ -581,7 +725,7 @@ final class EditorState {
             return ParagraphProperties()
         }
         let style = SlideStyleContext(presentation: presentation, slide: slide)
-        let body = shape.text ?? TextBody(paragraphs: [])
+        let body = formattedText(in: presentation) ?? TextBody(paragraphs: [])
         let index = activeTextRange.flatMap { body.paragraphIndices(in: $0).first } ?? 0
         let paragraph = body.paragraphs.indices.contains(index) ? body.paragraphs[index].properties : ParagraphProperties()
         return paragraph.merged(over: style.paragraphBase(for: shape, sources: style.sources(for: shape), level: paragraph.level ?? 0))
@@ -593,24 +737,22 @@ final class EditorState {
 
     func updateRuns(in presentation: inout Presentation, _ change: (inout RunProperties) -> Void) {
         let range = activeTextRange
-        updateShape(selectedShapeID, edits: [.text], in: &presentation) { shape in
-            if shape.text == nil { shape.text = TextBody(paragraphs: [Paragraph(runs: [])]) }
+        updateFormattedText(in: &presentation) { body in
             if let range, range.length > 0 {
-                shape.text?.updateRuns(in: range, change)
+                body.updateRuns(in: range, change)
             } else {
-                shape.text?.updateRuns(change)
+                body.updateRuns(change)
             }
         }
     }
 
     func updateParagraphs(in presentation: inout Presentation, _ change: (inout ParagraphProperties) -> Void) {
         let range = activeTextRange
-        updateShape(selectedShapeID, edits: [.text], in: &presentation) { shape in
-            if shape.text == nil { shape.text = TextBody(paragraphs: [Paragraph(runs: [])]) }
+        updateFormattedText(in: &presentation) { body in
             if let range {
-                shape.text?.updateParagraphs(in: range, change)
+                body.updateParagraphs(in: range, change)
             } else {
-                shape.text?.updateParagraphs(change)
+                body.updateParagraphs(change)
             }
         }
     }
@@ -763,6 +905,16 @@ final class EditorState {
 }
 
 extension SlideShape {
+    /// A table's columns and rows stretched to its frame, after a resize.
+    mutating func fitTableToFrame() {
+        guard case .table(var table) = kind else { return }
+        let size = table.gridSize
+        guard size.width != frame.width || size.height != frame.height else { return }
+        table.scale(toWidth: frame.width, height: frame.height)
+        kind = .table(table)
+        edits.insert(.table)
+    }
+
     /// The slide-space box a turned shape covers, in points.
     var boundingBox: CGRect {
         let frame = self.frame.points

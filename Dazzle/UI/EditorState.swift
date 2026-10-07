@@ -6,11 +6,13 @@ enum EditorPanel: String, Identifiable, Hashable {
     case format
     case notes
     case export
+    case find
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .find: String(localized: "Panel.Find.Title")
         case .text: String(localized: "Panel.Text.Title")
         case .format: String(localized: "Panel.Format.Title")
         case .notes: String(localized: "Panel.Notes.Title")

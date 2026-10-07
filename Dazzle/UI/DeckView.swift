@@ -83,7 +83,7 @@ struct DeckView: View {
             .navigationTransition(.zoom(sourceID: panel, in: panelTransition))
             // Formatting panels stay at half height, so the slide they change
             // is always in view; export needs the room for its slide picker.
-            .presentationDetents(panel == .export ? [.large] : [.medium])
+            .presentationDetents(panel == .export ? [.large] : (panel == .find ? [.medium, .large] : [.medium]))
             .presentationDragIndicator(.visible)
             .presentationBackground(.regularMaterial)
             // The slide stays live above a half-height panel, so changes can be
@@ -156,6 +156,7 @@ struct DeckView: View {
         case .format: FormatPanel(presentation: presentation, state: state)
         case .notes: NotesPanel(presentation: presentation, state: state)
         case .export: ExportPanel(presentation: document.presentation, state: state, name: name)
+        case .find: FindPanel(presentation: presentation, state: state)
         }
     }
 
@@ -293,6 +294,12 @@ struct DeckView: View {
                     .accessibilityIdentifier("unsupportedFeatures")
                 }
             }
+            Button("Toolbar.Find", systemImage: "magnifyingglass") {
+                state.endEditingText()
+                state.presentedPanel = .find
+            }
+            .keyboardShortcut("f", modifiers: .command)
+            .accessibilityIdentifier("find")
             Section {
                 Link(destination: URL(string: "https://github.com/katagaki/Dazzle")!) {
                     Label("Toolbar.SourceCode", systemImage: "chevron.left.forwardslash.chevron.right")

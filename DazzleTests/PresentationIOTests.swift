@@ -834,3 +834,33 @@ struct ShadowTests {
         #expect(screenBrightness(x: 450, y: 190) > 200)
     }
 }
+
+@Suite("Find and replace")
+struct FindReplaceTests {
+    @Test("Matches respect case and whole words")
+    func query() {
+        #expect(FindQuery(text: "cat").ranges(in: "Cat concatenate cat").count == 3)
+        #expect(FindQuery(text: "cat", matchesCase: true).ranges(in: "Cat concatenate cat").count == 2)
+        #expect(FindQuery(text: "cat", matchesWholeWords: true).ranges(in: "Cat concatenate cat").count == 2)
+    }
+
+    @Test("Replacing keeps the formatting of the text replaced, everywhere it is")
+    func replaceAll() throws {
+        var presentation = Presentation.blank
+        var bold = RunProperties()
+        bold.isBold = true
+        presentation.slides[0].shapes[0].text = TextBody(paragraphs: [
+            Paragraph(runs: [TextRun(text: "Sales in "), TextRun(text: "2025", properties: bold), TextRun(text: " grew")]),
+        ])
+        presentation.slides[0].notes = "Mention 2025 targets."
+        let matches = presentation.matches(for: FindQuery(text: "2025"))
+        #expect(matches.count == 2)
+        presentation.replace(matches, with: "2026")
+
+        let copy = try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+        let runs = try #require(copy.slides[0].shapes[0].text?.paragraphs.first?.runs)
+        #expect(runs.map(\.text) == ["Sales in ", "2026", " grew"])
+        #expect(runs[1].properties.isBold == true)
+        #expect(copy.slides[0].notes == "Mention 2026 targets.")
+    }
+}

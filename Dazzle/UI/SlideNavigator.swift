@@ -11,22 +11,47 @@ struct SlideNavigator: View {
 
     @State private var dropTargetID: Slide.ID?
 
+    /// How far in from the strip's ends thumbnails fade and blur.
+    private static let edgeFade: CGFloat = 64
+    /// Where the first and last thumbnails rest: clear of the strip's buttons.
+    private static let edgeInset: CGFloat = 60
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(axis == .vertical ? .vertical : .horizontal) {
                 stack
                     .padding(axis == .vertical ? EdgeInsets(top: 4, leading: 12, bottom: 96, trailing: 12)
-                             : EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                             : EdgeInsets(top: 8, leading: Self.edgeInset, bottom: 8, trailing: Self.edgeInset))
                     .animation(.snappy(duration: 0.22), value: presentation.slides.map(\.id))
             }
             .scrollIndicators(.hidden)
-            // Thumbnails blur away beneath the strip's buttons.
-            .scrollEdgeEffectStyle(.soft, for: .horizontal)
+            // Thumbnails fade and blur away beneath the strip's buttons.
+            .mask {
+                if axis == .horizontal {
+                    HStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: Self.edgeFade)
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: Self.edgeFade)
+                    }
+                } else {
+                    Color.black
+                }
+            }
             .onChange(of: state.selectedSlideID) { _, id in
                 guard let id else { return }
                 withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
             }
         }
+    }
+
+    /// More blur the further a thumbnail has slid under either end of the strip.
+    nonisolated private static func edgeBlur(for proxy: GeometryProxy) -> CGFloat {
+        // The visible strip, in the thumbnail's own coordinates.
+        guard let visible = proxy.bounds(of: .scrollView) else { return 0 }
+        let under = max(visible.minX + edgeFade, proxy.size.width - (visible.maxX - edgeFade), 0)
+        return min(under / edgeFade, 1) * 6
     }
 
     @ViewBuilder
@@ -56,6 +81,9 @@ struct SlideNavigator: View {
                 }
             } else {
                 thumbnail.frame(height: 52)
+                    .visualEffect { content, proxy in
+                        content.blur(radius: Self.edgeBlur(for: proxy))
+                    }
             }
         }
         .overlay {
@@ -162,7 +190,7 @@ struct SlideStrip<Trailing: View>: View {
 
     var body: some View {
         SlideNavigator(presentation: $presentation, state: state, axis: .horizontal, play: play)
-            .safeAreaBar(edge: .leading) {
+            .overlay(alignment: .leading) {
                 NewSlideMenu(presentation: $presentation, state: state) {
                     Image(systemName: "plus")
                         .font(.system(size: 15, weight: .semibold))
@@ -172,7 +200,7 @@ struct SlideStrip<Trailing: View>: View {
                 .glassEffect(.regular.interactive(), in: .circle)
                 .padding(.leading, 12)
             }
-            .safeAreaBar(edge: .trailing) {
+            .overlay(alignment: .trailing) {
                 trailing()
                     .padding(.trailing, 12)
             }

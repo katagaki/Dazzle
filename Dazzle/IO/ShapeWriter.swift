@@ -270,14 +270,62 @@ struct ShapeWriter {
     private func paragraphPropertiesXML(_ paragraph: Paragraph) -> String? {
         let element = paragraph.sourceProperties.flatMap(fragment) ?? fragment("<a:pPr/>")
         guard let element else { return nil }
-        if let alignment = paragraph.properties.alignment {
+        let properties = paragraph.properties
+        if let alignment = properties.alignment {
             element.setAttribute("algn", alignment.rawValue)
         }
-        if let level = paragraph.properties.level {
+        if let level = properties.level {
             element.setAttribute("lvl", level == 0 ? nil : String(level))
+        }
+        if let margin = properties.marginLeft { element.setAttribute("marL", String(margin)) }
+        if let indent = properties.indent { element.setAttribute("indent", String(indent)) }
+
+        // Children, each in its place in the schema's order.
+        func place(_ xml: String, replacing names: Set<String>) {
+            for child in element.children where names.contains(child.name) { element.removeChild(child) }
+            guard let new = fragment(xml) else { return }
+            let before = element.children.firstIndex { Self.paragraphChildOrder(of: $0.name) > Self.paragraphChildOrder(of: new.name) }
+            element.insertChild(new, at: before ?? element.children.count)
+        }
+        func spacing(_ value: Spacing) -> String {
+            switch value {
+            case .percent(let percent): "<a:spcPct val=\"\(Int((percent * 100_000).rounded()))\"/>"
+            case .points(let points): "<a:spcPts val=\"\(Int((points * 100).rounded()))\"/>"
+            }
+        }
+        if let line = properties.lineSpacing { place("<a:lnSpc>\(spacing(line))</a:lnSpc>", replacing: ["lnSpc"]) }
+        if let before = properties.spaceBefore { place("<a:spcBef>\(spacing(before))</a:spcBef>", replacing: ["spcBef"]) }
+        if let after = properties.spaceAfter { place("<a:spcAft>\(spacing(after))</a:spcAft>", replacing: ["spcAft"]) }
+        if let font = properties.bulletFont {
+            place("<a:buFont typeface=\"\(XMLLite.escape(font))\"/>", replacing: ["buFont", "buFontTx"])
+        }
+        let bullets: Set<String> = ["buNone", "buAutoNum", "buChar", "buBlip"]
+        switch properties.bullet {
+        case .none?: place("<a:buNone/>", replacing: bullets)
+        case .character(let character)?: place("<a:buChar char=\"\(XMLLite.escape(character))\"/>", replacing: bullets)
+        case .autoNumber(let scheme, let start)?:
+            let startAt = start == 1 ? "" : " startAt=\"\(start)\""
+            place("<a:buAutoNum type=\"\(XMLLite.escape(scheme))\"\(startAt)/>", replacing: bullets)
+        case nil: break
         }
         guard !element.attributes.isEmpty || !element.children.isEmpty else { return nil }
         return XMLLite.serialize(element, inheritedNamespaces: fragmentNamespaces)
+    }
+
+    /// Where a child of `a:pPr` goes among its siblings.
+    private static func paragraphChildOrder(of name: String) -> Int {
+        switch name {
+        case "lnSpc": 0
+        case "spcBef": 1
+        case "spcAft": 2
+        case "buClrTx", "buClr": 3
+        case "buSzTx", "buSzPct", "buSzPts": 4
+        case "buFontTx", "buFont": 5
+        case "buNone", "buAutoNum", "buChar", "buBlip": 6
+        case "tabLst": 7
+        case "defRPr": 8
+        default: 9
+        }
     }
 
     /// Run properties as the file had them, with what Dazzle models laid over.
@@ -294,6 +342,8 @@ struct ShapeWriter {
         if let bold = properties.isBold { element.setAttribute("b", bold ? "1" : "0") }
         if let italic = properties.isItalic { element.setAttribute("i", italic ? "1" : "0") }
         if let underline = properties.isUnderlined { element.setAttribute("u", underline ? "sng" : "none") }
+        if let strike = properties.isStruckThrough { element.setAttribute("strike", strike ? "sngStrike" : "noStrike") }
+        if let baseline = properties.baseline { element.setAttribute("baseline", baseline == 0 ? nil : String(baseline)) }
         if let color = properties.color, let fill = fragment("<a:solidFill>\(color.xml)</a:solidFill>") {
             for child in element.children where Fill.elementNames.contains(child.name) {
                 element.removeChild(child)

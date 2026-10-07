@@ -10,6 +10,9 @@ struct SlideRenderer {
         var showsPlaceholderPrompts = false
         /// Leave this shape out, while it is being edited somewhere else.
         var hiddenShapeID: SlideShape.ID?
+        /// Draw only this shape's bullets and numbers, leaving its text out,
+        /// while the text is being typed over the slide.
+        var bulletsOnlyShapeID: SlideShape.ID?
         /// Draw the background and the master's and layout's artwork. Off,
         /// the slide's own shapes are drawn on nothing, for a picture of them alone.
         var drawsBackground = true
@@ -156,8 +159,11 @@ struct SlideRenderer {
             PresetGeometry.textRect($0, adjustments: shape.geometry.adjustments, in: frame)
         } ?? frame
         let renderer = TextRenderer(style: style, slideNumber: slideNumber)
+        let bulletsOnly = shape.id == options.bulletsOnlyShapeID
         if let text = shape.text, !text.isEmpty {
-            renderer.draw(text, shape: shape, sources: sources, in: textFrame, context: context)
+            renderer.draw(text, shape: shape, sources: sources, in: textFrame, context: context, hidesText: bulletsOnly)
+        } else if bulletsOnly {
+            return
         } else if options.showsPlaceholderPrompts, let placeholder = shape.placeholder, !placeholder.isFurniture {
             drawPrompt(for: shape, placeholder: placeholder, sources: sources, frame: textFrame, renderer: renderer, context: context)
         }

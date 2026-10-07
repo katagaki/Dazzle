@@ -1,31 +1,32 @@
 import SwiftUI
 
-/// The selected shape's text, and how it looks.
+/// How the selected shape's text looks: all of it, or while typing, the
+/// part selected.
 struct TextPanel: View {
     @Binding var presentation: Presentation
     @Bindable var state: EditorState
-    @FocusState private var isEditing: Bool
 
     private var style: RunProperties { state.effectiveRunProperties(in: presentation) }
+    private var paragraph: ParagraphProperties { state.effectiveParagraphProperties(in: presentation) }
+    private var styleContext: SlideStyleContext? {
+        state.selectedSlide(in: presentation).map { SlideStyleContext(presentation: presentation, slide: $0) }
+    }
     private var themeChoices: [ColorChoice] {
-        state.selectedSlide(in: presentation).map {
-            ColorChoice.themeChoices(in: SlideStyleContext(presentation: presentation, slide: $0))
-        } ?? []
+        styleContext.map(ColorChoice.themeChoices(in:)) ?? []
     }
 
     var body: some View {
         Form {
-            Section {
-                TextEditor(text: Binding(
-                    get: { state.selectedShape(in: presentation)?.text?.plainText ?? "" },
-                    set: { state.setText($0, in: &presentation) }
-                ))
-                .focused($isEditing)
-                .frame(minHeight: 96)
-                .accessibilityIdentifier("textEditor")
-            }
+            Section("Format.Section.Font") {
+                NavigationLink {
+                    FontPicker(theme: styleContext?.theme ?? .office, selected: style.latinFont) { family in
+                        state.setFontFamily(family, in: &presentation)
+                    }
+                } label: {
+                    LabeledContent("Format.Font", value: fontName)
+                }
+                .accessibilityIdentifier("fontFamily")
 
-            Section("Format.Section.Text") {
                 HStack(spacing: 12) {
                     StyleToggle(symbol: "bold", label: "Format.Bold", isOn: style.isBold ?? false) {
                         state.toggleBold(in: &presentation)
@@ -35,6 +36,15 @@ struct TextPanel: View {
                     }
                     StyleToggle(symbol: "underline", label: "Format.Underline", isOn: style.isUnderlined ?? false) {
                         state.toggleUnderline(in: &presentation)
+                    }
+                    StyleToggle(symbol: "strikethrough", label: "Format.Strikethrough", isOn: style.isStruckThrough ?? false) {
+                        state.toggleStrikethrough(in: &presentation)
+                    }
+                    StyleToggle(symbol: "textformat.superscript", label: "Format.Superscript", isOn: (style.baseline ?? 0) > 0) {
+                        state.toggleBaseline(superscript: true, in: &presentation)
+                    }
+                    StyleToggle(symbol: "textformat.subscript", label: "Format.Subscript", isOn: (style.baseline ?? 0) < 0) {
+                        state.toggleBaseline(superscript: false, in: &presentation)
                     }
                 }
 
@@ -52,16 +62,6 @@ struct TextPanel: View {
                     .fixedSize()
                     .accessibilityIdentifier("fontSize")
                 }
-
-                Picker("Format.Alignment", selection: Binding(
-                    get: { state.effectiveAlignment(in: presentation) },
-                    set: { state.setAlignment($0, in: &presentation) }
-                )) {
-                    ForEach(ParagraphAlignment.allCases, id: \.self) { alignment in
-                        Image(systemName: alignment.symbolName).tag(alignment)
-                    }
-                }
-                .pickerStyle(.segmented)
             }
 
             Section("Format.Section.TextColor") {
@@ -71,10 +71,115 @@ struct TextPanel: View {
                     if let color { state.setTextColor(color, in: &presentation) }
                 }
             }
+
+            Section("Format.Section.Paragraph") {
+                Picker("Format.Alignment", selection: Binding(
+                    get: { state.effectiveAlignment(in: presentation) },
+                    set: { state.setAlignment($0, in: &presentation) }
+                )) {
+                    ForEach(ParagraphAlignment.allCases, id: \.self) { alignment in
+                        Image(systemName: alignment.symbolName).tag(alignment)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Format.List", selection: Binding(
+                    get: { state.listStyle(in: presentation) },
+                    set: { state.setListStyle($0, in: &presentation) }
+                )) {
+                    Text("Format.List.None").tag(EditorState.ListStyleChoice.none)
+                    Text("Format.List.Bullets").tag(EditorState.ListStyleChoice.bullets)
+                    Text("Format.List.Numbers").tag(EditorState.ListStyleChoice.numbers)
+                }
+                .accessibilityIdentifier("listStyle")
+
+                LabeledContent("Format.Indent.Level") {
+                    HStack(spacing: 12) {
+                        StyleToggle(symbol: "decrease.indent", label: "Format.Outdent", isOn: false) {
+                            state.changeIndent(by: -1, in: &presentation)
+                        }
+                        .disabled((paragraph.level ?? 0) == 0)
+                        StyleToggle(symbol: "increase.indent", label: "Format.Indent", isOn: false) {
+                            state.changeIndent(by: 1, in: &presentation)
+                        }
+                    }
+                }
+
+                Picker("Format.LineSpacing", selection: Binding(
+                    get: { lineSpacing },
+                    set: { state.setLineSpacing($0, in: &presentation) }
+                )) {
+                    ForEach([1.0, 1.15, 1.5, 2.0, 2.5, 3.0], id: \.self) { multiple in
+                        Text(verbatim: multiple.formatted(.number.precision(.fractionLength(0...2)))).tag(multiple)
+                    }
+                }
+                .accessibilityIdentifier("lineSpacing")
+            }
         }
-        .onAppear {
-            // A shape with nothing in it yet is there to be typed into.
-            if state.selectedShape(in: presentation)?.text?.isEmpty ?? true { isEditing = true }
+    }
+
+    private var fontName: String {
+        guard let font = style.latinFont else { return styleContext?.theme.minorFont ?? "" }
+        switch font {
+        case "+mj-lt", "+mj-ea": return String(format: String(localized: "Format.Font.Headings"), styleContext?.theme.majorFont ?? "")
+        case "+mn-lt", "+mn-ea": return String(format: String(localized: "Format.Font.Body"), styleContext?.theme.minorFont ?? "")
+        default: return font
+        }
+    }
+
+    private var lineSpacing: Double {
+        if case .percent(let value) = paragraph.lineSpacing {
+            return [1.0, 1.15, 1.5, 2.0, 2.5, 3.0].min { abs($0 - value) < abs($1 - value) } ?? 1
+        }
+        return 1
+    }
+}
+
+/// Every typeface the device has, led by the theme's own two.
+struct FontPicker: View {
+    let theme: Theme
+    let selected: String?
+    let onSelect: (String) -> Void
+
+    @State private var search = ""
+    @Environment(\.dismiss) private var dismiss
+
+    private static let families = UIFont.familyNames.sorted()
+
+    var body: some View {
+        List {
+            if search.isEmpty {
+                Section("Format.Font.Theme") {
+                    row(value: "+mj-lt", display: theme.majorFont,
+                        label: String(format: String(localized: "Format.Font.Headings"), theme.majorFont))
+                    row(value: "+mn-lt", display: theme.minorFont,
+                        label: String(format: String(localized: "Format.Font.Body"), theme.minorFont))
+                }
+            }
+            Section("Format.Font.All") {
+                ForEach(Self.families.filter { search.isEmpty || $0.localizedCaseInsensitiveContains(search) }, id: \.self) { family in
+                    row(value: family, display: family, label: family)
+                }
+            }
+        }
+        .searchable(text: $search)
+        .navigationTitle("Format.Font")
+    }
+
+    private func row(value: String, display: String, label: String) -> some View {
+        Button {
+            onSelect(value)
+            dismiss()
+        } label: {
+            HStack {
+                Text(verbatim: label)
+                    .font(Font(FontResolver.shared.font(family: display, size: 17, bold: false, italic: false) as UIFont))
+                    .foregroundStyle(.primary)
+                Spacer()
+                if selected == value {
+                    Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                }
+            }
         }
     }
 }

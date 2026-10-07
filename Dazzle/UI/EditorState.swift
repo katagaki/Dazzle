@@ -31,6 +31,10 @@ final class EditorState {
     /// Taps add shapes to the selection, or take them out, instead of
     /// replacing it.
     var isSelectingMultiple = false
+    /// The shape being typed into over the slide, if any.
+    var editingTextShapeID: SlideShape.ID?
+    /// What is selected in the text being typed, as UTF-16 offsets.
+    var textSelection: NSRange?
     var presentedPanel: EditorPanel?
     /// Freehand drawing over the slide, which becomes a picture when done.
     var isDrawing = false
@@ -56,6 +60,7 @@ final class EditorState {
         set {
             selectedShapeIDs = newValue.map { [$0] } ?? []
             if newValue == nil { isSelectingMultiple = false }
+            if newValue != editingTextShapeID { endEditingText() }
         }
     }
 
@@ -75,6 +80,7 @@ final class EditorState {
 
     /// Adds a shape to the selection, or takes it out if it is already in.
     func toggleSelection(_ id: SlideShape.ID) {
+        endEditingText()
         if let index = selectedShapeIDs.firstIndex(of: id) {
             selectedShapeIDs.remove(at: index)
         } else {
@@ -111,6 +117,7 @@ final class EditorState {
                 if presentedPanel == .text { presentedPanel = nil }
             }
         }
+        if let editingTextShapeID, !selectedShapeIDs.contains(editingTextShapeID) { endEditingText() }
     }
 
     // MARK: - Slides
@@ -237,7 +244,7 @@ final class EditorState {
             paragraphs: [Paragraph(runs: [])]
         )
         insert(shape, in: &presentation)
-        presentedPanel = .text
+        beginEditingText(shape.id)
     }
 
     func insertShape(_ preset: String, in presentation: inout Presentation) {
@@ -508,32 +515,103 @@ final class EditorState {
         }
     }
 
-    /// The selected shape's text properties as they will be drawn: its
-    /// first run's, with everything it inherits folded in.
+    /// Starts typing into a shape, over the slide.
+    func beginEditingText(_ id: SlideShape.ID) {
+        selectedShapeID = id
+        editingTextShapeID = id
+        textSelection = nil
+    }
+
+    func endEditingText() {
+        editingTextShapeID = nil
+        textSelection = nil
+    }
+
+    /// The part of the text being edited that formatting applies to: the
+    /// selection while typing, or `nil` for all of it.
+    var activeTextRange: NSRange? {
+        guard let editingTextShapeID, editingTextShapeID == selectedShapeID else { return nil }
+        return textSelection
+    }
+
+    /// Replaces the text being typed into. A shape that grows to fit its
+    /// text grows, or shrinks, with it.
+    func setTextBody(_ body: TextBody, in presentation: inout Presentation) {
+        guard let slide = selectedSlide(in: presentation), let current = selectedShape(in: presentation),
+              current.text != body else { return }
+        var height: Double?
+        if case .shape = body.properties.autofit, current.rotation == 0 {
+            let style = SlideStyleContext(presentation: presentation, slide: slide)
+            var measured = current
+            measured.text = body
+            let width = measured.frame.points.width
+            height = TextRenderer(style: style, slideNumber: 1).height(of: body, shape: measured, width: width)
+        }
+        updateShape(current.id, edits: height == nil ? [.text] : [.text, .transform], in: &presentation) { shape in
+            shape.text = body
+            if let height, abs(height - shape.frame.points.height) > 0.5 {
+                shape.frame.height = EMU.from(points: height)
+                shape.hasOwnFrame = true
+            }
+        }
+    }
+
+    /// The text properties as they will be drawn where formatting applies:
+    /// at the selection's start while typing, or the first run's otherwise,
+    /// with everything inherited folded in.
     func effectiveRunProperties(in presentation: Presentation) -> RunProperties {
         guard let slide = selectedSlide(in: presentation), let shape = selectedShape(in: presentation) else {
             return RunProperties()
         }
         let style = SlideStyleContext(presentation: presentation, slide: slide)
-        let paragraph = shape.text?.paragraphs.first
+        let body = shape.text ?? TextBody(paragraphs: [])
+        let range = activeTextRange
+        let paragraphIndex = range.flatMap { body.paragraphIndices(in: $0).first } ?? 0
+        let paragraph = body.paragraphs.indices.contains(paragraphIndex) ? body.paragraphs[paragraphIndex] : nil
         let base = (paragraph?.properties ?? ParagraphProperties())
             .merged(over: style.paragraphBase(for: shape, sources: style.sources(for: shape), level: paragraph?.properties.level ?? 0))
-        let run = paragraph?.runs.first?.properties ?? paragraph?.endProperties ?? RunProperties()
+        let run = range.flatMap { body.runProperties(at: $0.location + ($0.length > 0 ? 1 : 0)) }
+            ?? paragraph?.runs.first?.properties ?? paragraph?.endProperties ?? RunProperties()
         return run.merged(over: base.defaultRun)
     }
 
-    func effectiveAlignment(in presentation: Presentation) -> ParagraphAlignment {
-        guard let slide = selectedSlide(in: presentation), let shape = selectedShape(in: presentation) else { return .left }
+    /// The paragraph properties in force where formatting applies.
+    func effectiveParagraphProperties(in presentation: Presentation) -> ParagraphProperties {
+        guard let slide = selectedSlide(in: presentation), let shape = selectedShape(in: presentation) else {
+            return ParagraphProperties()
+        }
         let style = SlideStyleContext(presentation: presentation, slide: slide)
-        let paragraph = shape.text?.paragraphs.first
-        return paragraph?.properties.alignment
-            ?? style.paragraphBase(for: shape, sources: style.sources(for: shape), level: 0).alignment ?? .left
+        let body = shape.text ?? TextBody(paragraphs: [])
+        let index = activeTextRange.flatMap { body.paragraphIndices(in: $0).first } ?? 0
+        let paragraph = body.paragraphs.indices.contains(index) ? body.paragraphs[index].properties : ParagraphProperties()
+        return paragraph.merged(over: style.paragraphBase(for: shape, sources: style.sources(for: shape), level: paragraph.level ?? 0))
+    }
+
+    func effectiveAlignment(in presentation: Presentation) -> ParagraphAlignment {
+        effectiveParagraphProperties(in: presentation).alignment ?? .left
     }
 
     func updateRuns(in presentation: inout Presentation, _ change: (inout RunProperties) -> Void) {
+        let range = activeTextRange
         updateShape(selectedShapeID, edits: [.text], in: &presentation) { shape in
             if shape.text == nil { shape.text = TextBody(paragraphs: [Paragraph(runs: [])]) }
-            shape.text?.updateRuns(change)
+            if let range, range.length > 0 {
+                shape.text?.updateRuns(in: range, change)
+            } else {
+                shape.text?.updateRuns(change)
+            }
+        }
+    }
+
+    func updateParagraphs(in presentation: inout Presentation, _ change: (inout ParagraphProperties) -> Void) {
+        let range = activeTextRange
+        updateShape(selectedShapeID, edits: [.text], in: &presentation) { shape in
+            if shape.text == nil { shape.text = TextBody(paragraphs: [Paragraph(runs: [])]) }
+            if let range {
+                shape.text?.updateParagraphs(in: range, change)
+            } else {
+                shape.text?.updateParagraphs(change)
+            }
         }
     }
 
@@ -552,6 +630,19 @@ final class EditorState {
         updateRuns(in: &presentation) { $0.isUnderlined = !isOn }
     }
 
+    func toggleStrikethrough(in presentation: inout Presentation) {
+        let isOn = effectiveRunProperties(in: presentation).isStruckThrough ?? false
+        updateRuns(in: &presentation) { $0.isStruckThrough = !isOn }
+    }
+
+    /// Raises or lowers the text off the line: 30% up for superscript,
+    /// 25% down for subscript, as PowerPoint does; again to undo.
+    func toggleBaseline(superscript: Bool, in presentation: inout Presentation) {
+        let current = effectiveRunProperties(in: presentation).baseline ?? 0
+        let target = superscript ? 30_000 : -25_000
+        updateRuns(in: &presentation) { $0.baseline = (current > 0) == superscript && current != 0 ? 0 : target }
+    }
+
     /// Steps the text size, in points, keeping relative sizes within the shape.
     func stepFontSize(by points: Int, in presentation: inout Presentation) {
         let current = effectiveRunProperties(in: presentation).size ?? 1_800
@@ -559,15 +650,79 @@ final class EditorState {
         updateRuns(in: &presentation) { $0.size = target }
     }
 
+    /// A typeface by name, or a theme font such as `+mn-lt`.
+    func setFontFamily(_ family: String, in presentation: inout Presentation) {
+        updateRuns(in: &presentation) { $0.latinFont = family }
+    }
+
     func setAlignment(_ alignment: ParagraphAlignment, in presentation: inout Presentation) {
-        updateShape(selectedShapeID, edits: [.text], in: &presentation) { shape in
-            if shape.text == nil { shape.text = TextBody(paragraphs: [Paragraph(runs: [])]) }
-            shape.text?.updateParagraphs { $0.alignment = alignment }
-        }
+        updateParagraphs(in: &presentation) { $0.alignment = alignment }
     }
 
     func setTextColor(_ color: DrawingColor, in presentation: inout Presentation) {
         updateRuns(in: &presentation) { $0.color = color }
+    }
+
+    enum ListStyleChoice: Hashable {
+        case none
+        case bullets
+        case numbers
+    }
+
+    func listStyle(in presentation: Presentation) -> ListStyleChoice {
+        switch effectiveParagraphProperties(in: presentation).bullet {
+        case .character?: .bullets
+        case .autoNumber?: .numbers
+        default: .none
+        }
+    }
+
+    /// Makes the paragraphs a bulleted or numbered list, or plain. Text
+    /// with no hanging indent of its own gets PowerPoint's, so the text
+    /// lines up past the bullet.
+    func setListStyle(_ choice: ListStyleChoice, in presentation: inout Presentation) {
+        let effective = effectiveParagraphProperties(in: presentation)
+        let needsIndent = (effective.marginLeft ?? 0) == 0
+        updateParagraphs(in: &presentation) { paragraph in
+            let level = paragraph.level ?? 0
+            switch choice {
+            case .none:
+                paragraph.bullet = Bullet.none
+                if paragraph.indent.map({ $0 < 0 }) == true {
+                    paragraph.indent = 0
+                    paragraph.marginLeft = level * 457_200
+                }
+            case .bullets, .numbers:
+                if choice == .bullets {
+                    paragraph.bullet = .character("•")
+                    paragraph.bulletFont = "Arial"
+                } else {
+                    paragraph.bullet = .autoNumber(scheme: "arabicPeriod", startAt: 1)
+                }
+                if needsIndent {
+                    let hang = choice == .bullets ? 285_750 : 342_900
+                    paragraph.marginLeft = level * 457_200 + hang
+                    paragraph.indent = -hang
+                }
+            }
+        }
+    }
+
+    /// Moves the paragraphs a level in or out, as Tab and Shift-Tab do in a list.
+    func changeIndent(by step: Int, in presentation: inout Presentation) {
+        updateParagraphs(in: &presentation) { paragraph in
+            let level = min(max((paragraph.level ?? 0) + step, 0), 8)
+            guard level != paragraph.level ?? 0 else { return }
+            paragraph.level = level
+            if let margin = paragraph.marginLeft {
+                paragraph.marginLeft = max(margin + step * 457_200, 0)
+            }
+        }
+    }
+
+    /// Line spacing as a multiple of single spacing.
+    func setLineSpacing(_ multiple: Double, in presentation: inout Presentation) {
+        updateParagraphs(in: &presentation) { $0.lineSpacing = .percent(multiple) }
     }
 
     // MARK: - Fill and outline

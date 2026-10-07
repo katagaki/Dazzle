@@ -100,7 +100,7 @@ extension EditorState {
         } else if let text = pasteboard.string, !text.isEmpty {
             insertTextBox(in: &presentation)
             setText(text, in: &presentation)
-            presentedPanel = nil
+            endEditingText()
         }
     }
 

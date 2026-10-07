@@ -9,9 +9,10 @@ struct TextRenderer {
 
     /// Draws `body` into `rect`, in a context whose y axis points down.
     /// `colorOverride` replaces every colour, for placeholder prompts.
+    /// `hidesText` lays the text out but draws only its bullets.
     func draw(
         _ body: TextBody, shape: SlideShape, sources: [SlideShape], in rect: CGRect, context: CGContext,
-        colorOverride: RGBAColor? = nil
+        colorOverride: RGBAColor? = nil, hidesText: Bool = false
     ) {
         let properties = style.bodyProperties(for: shape, sources: sources)
             .merged(over: body.properties)
@@ -44,7 +45,7 @@ struct TextRenderer {
 
         var string = attributedString(
             body, shape: shape, sources: sources, scale: fontScale, spacingReduction: spacingReduction,
-            colorOverride: colorOverride
+            colorOverride: colorOverride, hidesText: hidesText
         )
         var framesetter = CTFramesetterCreateWithAttributedString(string)
         var size = suggestedSize(framesetter, string: string, width: layoutWidth)
@@ -53,7 +54,8 @@ struct TextRenderer {
         if case .normal = properties.autofit, fontScale == 1, size.height > inner.height + 1 {
             for scale in stride(from: 0.9, through: 0.3, by: -0.1) {
                 string = attributedString(
-                    body, shape: shape, sources: sources, scale: scale, spacingReduction: 0.1, colorOverride: colorOverride
+                    body, shape: shape, sources: sources, scale: scale, spacingReduction: 0.1, colorOverride: colorOverride,
+                    hidesText: hidesText
                 )
                 framesetter = CTFramesetterCreateWithAttributedString(string)
                 size = suggestedSize(framesetter, string: string, width: layoutWidth)
@@ -87,6 +89,23 @@ struct TextRenderer {
         drawStrikethroughs(in: frame, context: context)
     }
 
+    /// Where a shape's text is laid out, in slide points: the shape's text
+    /// rectangle with the insets taken off, and the body properties in force.
+    func textArea(of shape: SlideShape, sources: [SlideShape]) -> (rect: CGRect, properties: BodyProperties) {
+        let frame = shape.frame.points
+        let textFrame = shape.textFrame?.points ?? shape.geometry.presetName.map {
+            PresetGeometry.textRect($0, adjustments: shape.geometry.adjustments, in: frame)
+        } ?? frame
+        let properties = style.bodyProperties(for: shape, sources: sources)
+        let rect = CGRect(
+            x: textFrame.minX + EMU.points(properties.leftInset ?? 91_440),
+            y: textFrame.minY + EMU.points(properties.topInset ?? 45_720),
+            width: textFrame.width - EMU.points((properties.leftInset ?? 91_440) + (properties.rightInset ?? 91_440)),
+            height: textFrame.height - EMU.points((properties.topInset ?? 45_720) + (properties.bottomInset ?? 45_720))
+        )
+        return (rect, properties)
+    }
+
     /// How tall `body` lays out at `width`, insets included.
     func height(of body: TextBody, shape: SlideShape, width: CGFloat) -> CGFloat {
         let properties = style.bodyProperties(for: shape, sources: []).merged(over: body.properties)
@@ -115,8 +134,9 @@ struct TextRenderer {
 
     func attributedString(
         _ body: TextBody, shape: SlideShape, sources: [SlideShape], scale: Double, spacingReduction: Double,
-        colorOverride: RGBAColor?
+        colorOverride: RGBAColor?, hidesText: Bool = false
     ) -> NSAttributedString {
+        let textColor = hidesText ? RGBAColor(red: 0, green: 0, blue: 0, alpha: 0) : colorOverride
         let result = NSMutableAttributedString()
         var counters: [Int: Int] = [:]
 
@@ -167,7 +187,7 @@ struct TextRenderer {
                 if runProperties.capitalization == "all" { text = text.uppercased() }
                 text = Self.symbolsMapped(text)
                 result.append(NSAttributedString(
-                    string: text, attributes: attributes(for: runProperties, scale: scale, colorOverride: colorOverride)
+                    string: text, attributes: attributes(for: runProperties, scale: scale, colorOverride: textColor)
                 ))
             }
 
@@ -176,7 +196,7 @@ struct TextRenderer {
             let terminator = index < body.paragraphs.count - 1 ? "\n" : (paragraph.runs.isEmpty ? "\u{200B}" : "")
             if !terminator.isEmpty {
                 result.append(NSAttributedString(
-                    string: terminator, attributes: attributes(for: endRun, scale: scale, colorOverride: colorOverride)
+                    string: terminator, attributes: attributes(for: endRun, scale: scale, colorOverride: textColor)
                 ))
             }
 

@@ -62,7 +62,7 @@ struct DeckView: View {
         .background(Color(.secondarySystemBackground))
         // Keyboard navigation belongs to the canvas, and only while no panel
         // or drawing is up — otherwise it holds focus away from them.
-        .focusable(state.presentedPanel == nil && !state.isDrawing)
+        .focusable(state.presentedPanel == nil && !state.isDrawing && state.editingTextShapeID == nil)
         .focusEffectDisabled()
         .onKeyPress(action: handleKeyPress)
         .toolbar { undoToolbar }
@@ -330,7 +330,7 @@ struct DeckView: View {
                 state.selectedShapeID = nil
                 return .handled
             case .return where shape.canHoldText && shape.isEditable:
-                state.presentedPanel = .text
+                state.beginEditingText(shape.id)
                 return .handled
             case .upArrow: offset.height = -nudge
             case .downArrow: offset.height = nudge

@@ -69,7 +69,7 @@ struct SlideCanvas: View {
     private func canvas(for slide: Slide, scale: CGFloat, size: CGSize) -> some View {
         let displayed = preview(of: slide)
         return ZStack(alignment: .topLeading) {
-            SlideView(presentation: presentation, slide: displayed, options: .editing)
+            SlideView(presentation: presentation, slide: displayed, options: renderOptions)
                 .frame(width: size.width, height: size.height)
                 .clipShape(.rect(cornerRadius: 3))
                 .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
@@ -91,6 +91,11 @@ struct SlideCanvas: View {
                 }
             }
 
+            if !state.isDrawing, let id = state.editingTextShapeID,
+               let shape = displayed.shapes.first(where: { $0.id == id }), shape.canHoldText {
+                textEditor(for: shape, on: displayed, scale: scale)
+            }
+
             if state.isDrawing {
                 DrawingOverlay(scale: scale) { media, frame in
                     state.insertPicture(media, frame: frame, name: String(localized: "Drawing.ShapeName"), in: &presentation)
@@ -102,6 +107,55 @@ struct SlideCanvas: View {
             }
         }
         .coordinateSpace(.named(Self.coordinateSpace))
+    }
+
+    private var renderOptions: SlideRenderer.Options {
+        var options = SlideRenderer.Options.editing
+        options.bulletsOnlyShapeID = state.editingTextShapeID
+        return options
+    }
+
+    // MARK: - Typing
+
+    /// The text being typed, laid over the shape exactly where its text is drawn.
+    private func textEditor(for shape: SlideShape, on slide: Slide, scale: CGFloat) -> some View {
+        let style = SlideStyleContext(presentation: presentation, slide: slide)
+        let sources = style.sources(for: shape)
+        let slideNumber = (presentation.index(of: slide.id) ?? 0) + 1
+        let (area, properties) = TextRenderer(style: style, slideNumber: slideNumber).textArea(of: shape, sources: sources)
+        let frame = shape.frame.points
+        var fontScale = 1.0
+        if case .normal(let scale, _) = properties.autofit { fontScale = scale }
+        return InPlaceTextEditor(
+            body: shape.text ?? TextBody(paragraphs: [Paragraph(runs: [])]),
+            shape: shape, sources: sources, style: style, slideNumber: slideNumber, scale: scale, fontScale: fontScale,
+            anchor: properties.anchor ?? .top, selection: state.textSelection,
+            onChange: { state.setTextBody($0, in: &presentation) },
+            onSelectionChange: { state.textSelection = $0 },
+            toolbar: InPlaceTextEditor.Toolbar(
+                bold: { state.toggleBold(in: &presentation) },
+                italic: { state.toggleItalic(in: &presentation) },
+                underline: { state.toggleUnderline(in: &presentation) },
+                bullets: {
+                    let current = state.listStyle(in: presentation)
+                    state.setListStyle(current == .bullets ? .none : .bullets, in: &presentation)
+                },
+                numbers: {
+                    let current = state.listStyle(in: presentation)
+                    state.setListStyle(current == .numbers ? .none : .numbers, in: &presentation)
+                },
+                outdent: { state.changeIndent(by: -1, in: &presentation) },
+                indent: { state.changeIndent(by: 1, in: &presentation) },
+                format: { state.presentedPanel = .text },
+                done: { state.endEditingText() }
+            )
+        )
+        .frame(width: max(area.width * scale, 1), height: max(area.height * scale, 1))
+        .offset(x: (area.minX - frame.minX) * scale, y: (area.minY - frame.minY) * scale)
+        .frame(width: max(frame.width * scale, 1), height: max(frame.height * scale, 1), alignment: .topLeading)
+        .rotationEffect(.degrees(shape.rotation))
+        .offset(x: frame.minX * scale, y: frame.minY * scale)
+        .accessibilityIdentifier("inPlaceTextEditor")
     }
 
     /// The slide with the move, resize or turn in progress applied.
@@ -134,12 +188,17 @@ struct SlideCanvas: View {
         let doubleTap = SpatialTapGesture(count: 2).onEnded { value in
             let point = CGPoint(x: value.location.x / scale, y: value.location.y / scale)
             guard let shape = shape(at: point, on: slide, scale: scale) else { return }
-            state.selectedShapeID = shape.id
-            if shape.canHoldText, shape.isEditable { state.presentedPanel = .text }
+            if shape.canHoldText, shape.isEditable, slide.canEditShapes {
+                state.beginEditingText(shape.id)
+            } else {
+                state.selectedShapeID = shape.id
+            }
         }
         let singleTap = SpatialTapGesture().onEnded { value in
             let point = CGPoint(x: value.location.x / scale, y: value.location.y / scale)
             let hit = shape(at: point, on: slide, scale: scale)
+            // A tap in the shape being typed into belongs to the text.
+            if let editing = state.editingTextShapeID, hit?.id == editing { return }
             if state.isSelectingMultiple || Self.isShiftHeld {
                 if let hit { state.toggleSelection(hit.id) }
             } else {

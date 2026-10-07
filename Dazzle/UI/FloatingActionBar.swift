@@ -93,8 +93,16 @@ struct FloatingActionBar: View {
             }
             .accessibilityIdentifier("selectMultiple")
             if shape.canHoldText, shape.isEditable, !state.hasMultipleSelection {
-                panelAction("character.cursor.ibeam", label: "ActionBar.EditText", panel: .text)
-                    .accessibilityIdentifier("editText")
+                action("character.cursor.ibeam", isOn: state.editingTextShapeID == shape.id, label: "ActionBar.EditText") {
+                    if state.editingTextShapeID == shape.id {
+                        state.endEditingText()
+                    } else {
+                        state.beginEditingText(shape.id)
+                    }
+                }
+                .accessibilityIdentifier("editText")
+                panelAction("textformat", label: "ActionBar.TextFormat", panel: .text)
+                    .accessibilityIdentifier("textFormat")
             }
             if shape.isEditable {
                 AlignMenu(presentation: $presentation, state: state) {

@@ -543,3 +543,76 @@ struct PasteTests {
         #expect(PartImporter.unusedName(like: "ppt/embeddings/Sheet.xlsx", taken: []) == "ppt/embeddings/Sheet1.xlsx")
     }
 }
+
+@Suite("Rich text")
+@MainActor
+struct RichTextTests {
+    private var body: TextBody {
+        TextBody(paragraphs: [
+            Paragraph(runs: [TextRun(text: "Hello world")]),
+            Paragraph(runs: [TextRun(text: "Second")]),
+        ])
+    }
+
+    @Test("Formatting a range splits runs and leaves the rest alone")
+    func rangeFormatting() {
+        var text = body
+        text.updateRuns(in: NSRange(location: 6, length: 5)) { $0.isBold = true }
+        #expect(text.paragraphs[0].runs.map(\.text) == ["Hello ", "world"])
+        #expect(text.paragraphs[0].runs.map(\.properties.isBold) == [nil, true])
+        #expect(text.paragraphs[1].runs[0].properties.isBold == nil)
+        #expect(text.plainText == "Hello world\nSecond")
+    }
+
+    @Test("A range across paragraphs formats both, and finds both")
+    func acrossParagraphs() {
+        var text = body
+        let range = NSRange(location: 8, length: 6)
+        #expect(text.paragraphIndices(in: range) == [0, 1])
+        #expect(text.paragraphIndices(in: NSRange(location: 13, length: 0)) == [1])
+        text.updateRuns(in: range) { $0.isItalic = true }
+        #expect(text.paragraphs[0].runs.map(\.text) == ["Hello wo", "rld"])
+        #expect(text.paragraphs[1].runs.map(\.text) == ["Se", "cond"])
+        #expect(text.runProperties(at: 13)?.isItalic == true)
+        #expect(text.runProperties(at: 3)?.isItalic == nil)
+    }
+
+    @Test("Text round-trips through the editor, keeping each run's formatting")
+    func editorRoundTrip() {
+        var text = body
+        text.updateRuns(in: NSRange(location: 0, length: 5)) { $0.isBold = true }
+        let presentation = Presentation.blank
+        let style = SlideStyleContext(presentation: presentation, slide: presentation.slides[0])
+        let shape = SlideShape(shapeID: 2, name: "", kind: .shape, frame: .zero)
+        let string = NSMutableAttributedString(attributedString: EditableText.attributedString(
+            text, shape: shape, sources: [], style: style, scale: 1, fontScale: 1, slideNumber: 1
+        ))
+        #expect(EditableText.body(from: string, template: text) == text)
+
+        // Typing at the end of the bold word continues it in bold.
+        string.insert(NSAttributedString(string: "!", attributes: string.attributes(at: 4, effectiveRange: nil)), at: 5)
+        let edited = EditableText.body(from: string, template: text)
+        #expect(edited.paragraphs[0].runs.map(\.text) == ["Hello!", " world"])
+        #expect(edited.paragraphs[0].runs[0].properties.isBold == true)
+    }
+
+    @Test("Lists, indents and spacing are written and read back")
+    func paragraphWriting() throws {
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.insertTextBox(in: &presentation)
+        state.setText("One\nTwo", in: &presentation)
+        state.endEditingText()
+        state.setListStyle(.numbers, in: &presentation)
+        state.setLineSpacing(1.5, in: &presentation)
+        state.changeIndent(by: 1, in: &presentation)
+        let copy = try PPTXReader.presentation(from: PPTXWriter.data(from: presentation))
+        let paragraph = try #require(copy.slides[0].shapes.last?.text?.paragraphs.first?.properties)
+        #expect(paragraph.bullet == .autoNumber(scheme: "arabicPeriod", startAt: 1))
+        #expect(paragraph.lineSpacing == .percent(1.5))
+        #expect(paragraph.level == 1)
+        #expect(paragraph.marginLeft == 342_900 + 457_200)
+        #expect(paragraph.indent == -342_900)
+    }
+}

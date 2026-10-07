@@ -30,7 +30,8 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
         case picture(Picture)
         case group(ShapeGroup)
         case table(SlideTable)
-        case chart
+        /// A chart, or `nil` for one Dazzle cannot read.
+        case chart(Chart?)
         /// SmartArt, drawn from the shapes PowerPoint saved alongside it.
         case diagram([SlideShape])
         /// Anything else: an embedded object, ink, a 3D model.

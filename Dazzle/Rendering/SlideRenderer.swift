@@ -117,7 +117,9 @@ struct SlideRenderer {
             drawPicture(picture, shape: shape, frame: frame, style: style, context: context)
         case .table(let table):
             drawTable(table, shape: shape, frame: frame, style: style, context: context)
-        case .chart:
+        case .chart(let chart?):
+            ChartRenderer(chart: chart, style: style).draw(in: frame, context: context)
+        case .chart(nil):
             drawStandIn(String(localized: "Object.Chart"), frame: frame, context: context, isChart: true)
         case .unsupported(let label):
             if frame.width > 0, frame.height > 0 {

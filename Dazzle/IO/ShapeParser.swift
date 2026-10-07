@@ -199,8 +199,11 @@ final class ShapeParser {
         if let table = data?.firstChild(named: "tbl") {
             shape.kind = .table(self.table(table))
         } else if uri.hasSuffix("/chart") || uri.contains("chartex") {
-            features.insert(.charts)
-            shape.kind = .chart
+            let path = data?.children.first { $0.name == "chart" }?.relationshipID.flatMap(target(of:))
+            let chart = path.flatMap { Chart(path: $0, data: parts[$0]) }
+            // Charts Dazzle cannot read, such as Office 2016's newer kinds, are kept and shown as a stand-in.
+            if chart == nil { features.insert(.charts) }
+            shape.kind = .chart(chart)
         } else if uri.hasSuffix("/diagram") {
             shape.kind = diagram(data, frame: shape.frame) ?? .unsupported(String(localized: "Object.SmartArt"))
         } else if uri.hasSuffix("/ole") {

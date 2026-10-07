@@ -6,6 +6,7 @@ struct DazzleApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
+        DazzleLaunchScene()
         DocumentGroup(newDocument: DazzleDocument()) { configuration in
             DeckView(document: configuration.$document, fileName: configuration.fileURL?.lastPathComponent)
         }

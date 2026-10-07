@@ -33,8 +33,8 @@ private enum LaunchPalette {
 
 /// Slides laid like brickwork behind the button, every other row lined up
 /// with its edges, fading out towards the browser. Held back so the button
-/// stays easy to read. The slides come in once, row by row from either side,
-/// and then hold still.
+/// stays easy to read. The slides come in once, all together, each row from
+/// the other side to the one above, and then hold still.
 private struct LaunchSlideWall: View {
     var frame: CGRect
     var titleFrame: CGRect
@@ -95,13 +95,9 @@ private struct LaunchSlideWall: View {
     }
 
     /// Even rows ease in a little way from the leading edge and odd rows from
-    /// the trailing one, each row as one, a row at a time from the top.
+    /// the trailing one, all at the same time.
     private func entrance(for slot: Slot) -> LaunchEntrance {
-        LaunchEntrance(
-            isShown: isRevealed,
-            delay: 0.12 * Double(slot.row),
-            distance: (slot.row.isMultiple(of: 2) ? -1 : 1) * 40
-        )
+        LaunchEntrance(isShown: isRevealed, distance: (slot.row.isMultiple(of: 2) ? -1 : 1) * 40)
     }
 
     private func slots(content: CGRect, columns: Int, slideWidth: CGFloat, gap: CGFloat, scale: CGFloat) -> [Slot] {
@@ -139,10 +135,9 @@ private struct LaunchSlideWall: View {
 }
 
 /// Eases a slide in from the side by the given distance as it fades in, once
-/// it is to be shown, after the given delay. Only fades when Reduce Motion is on.
+/// it is to be shown. Only fades when Reduce Motion is on.
 private struct LaunchEntrance: ViewModifier {
     var isShown: Bool
-    var delay: Double
     var distance: CGFloat
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -151,7 +146,7 @@ private struct LaunchEntrance: ViewModifier {
         content
             .opacity(isShown ? 1 : 0)
             .offset(x: isShown || reduceMotion ? 0 : distance)
-            .animation(.easeOut(duration: 1.2).delay(delay), value: isShown)
+            .animation(.easeOut(duration: 1.2), value: isShown)
     }
 }
 

@@ -447,6 +447,21 @@ struct SlideRenderer {
         if let (line, placeholderColor) = style.line(for: shape, sources: []) {
             stroke(outlinePath, line: line, placeholderColor: placeholderColor, style: style, context: context)
         }
+        // In the editor, a video or sound is marked as one.
+        if picture.media != nil, options.showsPlaceholderPrompts {
+            let size = min(max(min(frame.width, frame.height) * 0.18, 10), 28)
+            let badge = CGRect(x: frame.minX + size * 0.4, y: frame.maxY - size * 1.4, width: size, height: size)
+            context.saveGState()
+            context.setFillColor(RGBAColor(red: 0, green: 0, blue: 0, alpha: 0.55).cgColor)
+            context.fillEllipse(in: badge)
+            context.setFillColor(RGBAColor.white.cgColor)
+            context.move(to: CGPoint(x: badge.minX + size * 0.38, y: badge.minY + size * 0.27))
+            context.addLine(to: CGPoint(x: badge.minX + size * 0.38, y: badge.maxY - size * 0.27))
+            context.addLine(to: CGPoint(x: badge.maxX - size * 0.25, y: badge.midY))
+            context.closePath()
+            context.fillPath()
+            context.restoreGState()
+        }
     }
 
     /// A picture from the package, with its colour effects applied.

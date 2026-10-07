@@ -59,6 +59,24 @@ struct SlideShape: Identifiable, Equatable, Hashable, Sendable {
         var cropRight = 0.0
         var cropBottom = 0.0
         var effects = BlipEffects()
+        /// The video or sound the picture stands for, if it is one.
+        var media: Media?
+    }
+
+    /// A video or sound, shown as a picture until it plays.
+    struct Media: Equatable, Hashable, Sendable {
+        enum Kind: Equatable, Hashable, Sendable {
+            case video
+            case audio
+        }
+
+        var kind: Kind
+        /// The media's path inside the package; `nil` for a linked file.
+        var path: String?
+        /// Where a linked file is, outside the package.
+        var url: String?
+        /// Whether it starts as its slide does, rather than when tapped.
+        var playsAutomatically = false
     }
 
     struct ShapeGroup: Equatable, Hashable, Sendable {

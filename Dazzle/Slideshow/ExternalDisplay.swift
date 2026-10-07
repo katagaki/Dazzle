@@ -29,6 +29,8 @@ struct AudienceView: View {
     /// Between slideshows, an external display shows the app's mark rather
     /// than nothing, so the presenter can tell it is connected.
     var showsIdleBrand = false
+    /// Play buttons over paused media, on the screen that is touched.
+    var showsMediaControls = false
 
     var body: some View {
         ZStack {
@@ -37,6 +39,12 @@ struct AudienceView: View {
                 if !session.isBlanked {
                     SlideView(presentation: presentation, slide: slide)
                         .aspectRatio(presentation.slideSize.aspectRatio, contentMode: .fit)
+                        .overlay {
+                            MediaOverlay(
+                                slide: slide, slideSize: presentation.slideSize.points, playback: session.media,
+                                showsControls: showsMediaControls
+                            )
+                        }
                         .id(slide.id)
                         .transition(.opacity)
                 }

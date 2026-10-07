@@ -1,4 +1,6 @@
+import AVFoundation
 import CoreGraphics
+import CoreTransferable
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -54,4 +56,63 @@ struct PreparedMedia: Sendable {
         fileExtension = "png"
         self.size = size
     }
+
+    static func png(of image: CGImage) -> Data? {
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination) ? output as Data : nil
+    }
 }
+
+/// A video made ready to put in a presentation: in H.264 MP4, which
+/// PowerPoint plays everywhere, with a picture of its first frame to show
+/// until it plays.
+struct PreparedVideo: Sendable {
+    var data: Data
+    var poster: PreparedMedia
+    /// At its natural size and orientation, in points.
+    var size: CGSize
+
+    static func prepare(from url: URL) async throws -> PreparedVideo {
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let (natural, transform) = try await track.load(.naturalSize, .preferredTransform)
+        let turned = natural.applying(transform)
+        let size = CGSize(width: abs(turned.width), height: abs(turned.height))
+
+        let output = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).mp4")
+        guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1920x1080) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try await session.export(to: output, as: .mp4)
+        defer { try? FileManager.default.removeItem(at: output) }
+
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        let (frame, _) = try await generator.image(at: .zero)
+        guard let png = PreparedMedia.png(of: frame) else { throw CocoaError(.fileWriteUnknown) }
+        return PreparedVideo(data: try Data(contentsOf: output), poster: PreparedMedia(png: png, size: size), size: size)
+    }
+}
+
+/// A movie handed over by the photo picker, copied somewhere it can be read.
+struct PickedMovie: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .movie) { movie in
+            SentTransferredFile(movie.url)
+        } importing: { received in
+            let copy = FileManager.default.temporaryDirectory
+                .appending(path: UUID().uuidString + "." + received.file.pathExtension)
+            try FileManager.default.copyItem(at: received.file, to: copy)
+            return PickedMovie(url: copy)
+        }
+    }
+}
+

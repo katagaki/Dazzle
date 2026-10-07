@@ -155,10 +155,7 @@ final class ShapeParser {
             picture.cropBottom = fraction("b")
         }
         let details = nonVisual?.firstChild(named: "nvPr")
-        if let details, details.firstChild(named: "videoFile") != nil || details.firstChild(named: "audioFile") != nil
-            || details.firstChild(named: "extLst")?.children.contains(where: { $0.firstChild(named: "media") != nil }) == true {
-            features.insert(.media)
-        }
+        picture.media = media(in: details)
         let properties = element.firstChild(named: "spPr")
         var shape = SlideShape(shapeID: id, name: name, kind: .picture(picture), frame: .zero)
         shape.placeholder = Placeholder(element: details?.firstChild(named: "ph"))
@@ -168,6 +165,36 @@ final class ShapeParser {
         shape.shadow = Shadow(element: properties?.firstChild(named: "effectLst")?.firstChild(named: "outerShdw"))
         inheritFrame(&shape)
         return shape
+    }
+
+    /// A picture's video or sound: the copy in the package PowerPoint 2010
+    /// and later embed, or failing that, the file the older link names.
+    private func media(in details: XMLElement?) -> SlideShape.Media? {
+        guard let details else { return nil }
+        let video = details.firstChild(named: "videoFile")
+        let audio = details.firstChild(named: "audioFile")
+        let embedded = details.firstChild(named: "extLst")?.children
+            .compactMap { $0.firstChild(named: "media") }.first
+        guard video != nil || audio != nil || embedded != nil else { return nil }
+        var media = SlideShape.Media(kind: audio != nil ? .audio : .video)
+        if let id = embedded?.qualifiedAttributes.first(where: { $0.key.hasSuffix(":embed") })?.value {
+            media.path = target(of: id)
+        }
+        if media.path == nil, let id = (video ?? audio)?.qualifiedAttributes.first(where: { $0.key.hasSuffix(":link") })?.value,
+           let relationship = relationships.first(where: { $0.id == id }) {
+            if relationship.isExternal {
+                media.url = relationship.target
+            } else {
+                media.path = PackagePath.resolve(relationship.target, from: partPath)
+            }
+        }
+        if media.path == nil && media.url == nil { features.insert(.media) }
+        if let path = media.path {
+            // An old Windows format or a codec the device lacks still shows its picture; it just will not play.
+            let ext = (path as NSString).pathExtension.lowercased()
+            if ["wmv", "avi", "wma", "asf", "mpg", "mpeg"].contains(ext) { features.insert(.media) }
+        }
+        return media
     }
 
     private func group(_ element: XMLElement) -> SlideShape {

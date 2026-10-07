@@ -246,7 +246,10 @@ enum PPTXReader {
         slide.showsMasterShapes = root.attribute("showMasterSp") != "0"
         slide.canEditShapes = !parser.hasUncapturableShape
         features.formUnion(parser.features)
-        if root.firstChild(named: "timing") != nil { features.insert(.animations) }
+        if let timing = root.firstChild(named: "timing") {
+            features.insert(.animations)
+            markAutoplay(in: timing, shapes: &slide.shapes)
+        }
 
         if let notesPath = relationships.first(where: { $0.type == OOXML.RelationshipType.notesSlide })
             .map({ PackagePath.resolve($0.target, from: path) }) {
@@ -254,6 +257,32 @@ enum PPTXReader {
             slide.notes = notesText(parts[notesPath]) ?? ""
         }
         return slide
+    }
+
+    /// Media a slide's timing plays without waiting for a tap: a play command
+    /// that runs with or after the slide's start rather than on a click.
+    private static func markAutoplay(in timing: XMLElement, shapes: inout [SlideShape]) {
+        var automatic: Set<Int> = []
+        func visit(_ element: XMLElement) {
+            if element.name == "cmd", element.attribute("cmd")?.hasPrefix("playFrom") == true,
+               let target = element.firstDescendant(atPath: "cBhvr/tgtEl/spTgt")?.attribute("spid").flatMap(Int.init) {
+                var node = element.parent
+                var isClick = false
+                while let current = node {
+                    if current.name == "cTn", current.attribute("nodeType") == "clickEffect" { isClick = true }
+                    node = current.parent
+                }
+                if !isClick { automatic.insert(target) }
+            }
+            element.children.forEach(visit)
+        }
+        visit(timing)
+        for index in shapes.indices where automatic.contains(shapes[index].shapeID) {
+            if case .picture(var picture) = shapes[index].kind, picture.media != nil {
+                picture.media?.playsAutomatically = true
+                shapes[index].kind = .picture(picture)
+            }
+        }
     }
 
     /// The speaker notes: the text of a notes page's body placeholder.

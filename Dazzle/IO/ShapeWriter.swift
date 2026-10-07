@@ -105,8 +105,26 @@ struct ShapeWriter {
                 """
         case .picture(let picture):
             let reference = relationshipID(forImage: picture.imagePath ?? "")
+            // A video PowerPoint 2010 and later can play: the older link
+            // and the newer embedding both name the same file.
+            var media = ""
+            var action = ""
+            if let path = picture.media?.path {
+                let isAudio = picture.media?.kind == .audio
+                let link = relationshipID(
+                    for: path, type: isAudio ? OOXML.RelationshipType.audio : OOXML.RelationshipType.video
+                )
+                let embed = relationshipID(for: path, type: OOXML.RelationshipType.media)
+                media = "<a:\(isAudio ? "audioFile" : "videoFile") r:link=\"\(link)\"/><p:extLst><p:ext "
+                    + "uri=\"{DAA4B4D4-6D71-4841-9C94-3DE7FCFB9230}\"><p14:media "
+                    + "xmlns:p14=\"http://schemas.microsoft.com/office/powerpoint/2010/main\" r:embed=\"\(embed)\"/>"
+                    + "</p:ext></p:extLst>"
+                action = "<a:hlinkClick r:id=\"\" action=\"ppaction://media\"/>"
+            }
+            let common = action.isEmpty ? identity
+                : "<p:cNvPr id=\"\(shape.shapeID)\" name=\"\(name)\">\(action)</p:cNvPr>"
             return """
-                <p:pic><p:nvPicPr>\(identity)<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/>\
+                <p:pic><p:nvPicPr>\(common)<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr>\(media)</p:nvPr>\
                 </p:nvPicPr><p:blipFill><a:blip r:embed="\(reference)"/><a:stretch><a:fillRect/></a:stretch>\
                 </p:blipFill><p:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>
                 """

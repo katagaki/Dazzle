@@ -10,6 +10,8 @@ struct FloatingActionBar: View {
     var namespace: Namespace.ID
 
     @State private var photo: PhotosPickerItem?
+    /// A video being made ready, which takes a moment.
+    @State private var isPreparingVideo = false
 
     private static let selectionActionsID = "selectionActions"
 
@@ -60,8 +62,8 @@ struct FloatingActionBar: View {
             shapeMenu
             tableMenu
             chartMenu
-            PhotosPicker(selection: $photo, matching: .images) {
-                ActionSymbol(name: "photo", isOn: false)
+            PhotosPicker(selection: $photo, matching: .any(of: [.images, .videos])) {
+                ActionSymbol(name: isPreparingVideo ? "hourglass" : "photo", isOn: isPreparingVideo)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("insertPhoto")
@@ -289,6 +291,18 @@ struct FloatingActionBar: View {
     }
 
     private func insert(_ item: PhotosPickerItem) async {
+        if item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
+            isPreparingVideo = true
+            defer { isPreparingVideo = false }
+            do {
+                guard let movie = try await item.loadTransferable(type: PickedMovie.self) else { return }
+                defer { try? FileManager.default.removeItem(at: movie.url) }
+                state.insertVideo(try await PreparedVideo.prepare(from: movie.url), in: &presentation)
+            } catch {
+                state.errorMessage = String(localized: "Error.UnreadableVideo")
+            }
+            return
+        }
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
         let media = await Task.detached { PreparedMedia(data: data) }.value
         guard let media else {

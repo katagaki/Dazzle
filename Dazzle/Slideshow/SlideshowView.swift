@@ -55,7 +55,7 @@ private struct AudienceControls: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        AudienceView(session: session)
+        AudienceView(session: session, showsMediaControls: true)
             .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
             .contentShape(.rect)
             .gesture(
@@ -67,12 +67,18 @@ private struct AudienceControls: View {
             .simultaneousGesture(
                 SpatialTapGesture().onEnded { value in
                     defer { revealControls() }
-                    // A link on the slide goes where it leads.
                     if let presentation = session.presentation,
-                       let point = SlideGeometry.slidePoint(value.location, in: size, slideSize: presentation.slideSize.points),
-                       let link = session.link(at: point) {
-                        if let url = session.follow(link) { openURL(url) }
-                        return
+                       let point = SlideGeometry.slidePoint(value.location, in: size, slideSize: presentation.slideSize.points) {
+                        // A video or sound plays or pauses.
+                        if let media = session.mediaShape(at: point) {
+                            session.media.toggle(media)
+                            return
+                        }
+                        // A link on the slide goes where it leads.
+                        if let link = session.link(at: point) {
+                            if let url = session.follow(link) { openURL(url) }
+                            return
+                        }
                     }
                     // The left fifth goes back; anywhere else goes on.
                     if value.location.x < 120 { session.previous() } else { session.next() }
@@ -194,10 +200,18 @@ struct PresenterView: View {
                 .aspectRatio(presentation.slideSize.aspectRatio, contentMode: .fit)
                 // The presenter can follow the slide's links from here.
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { currentSize = $0 }
+                .overlay {
+                    MediaOverlay(slide: slide, slideSize: presentation.slideSize.points, playback: session.media, showsControls: true)
+                }
                 .onTapGesture { location in
-                    guard let point = SlideGeometry.slidePoint(location, in: currentSize, slideSize: presentation.slideSize.points),
-                          let link = session.link(at: point) else { return }
-                    if let url = session.follow(link) { openURL(url) }
+                    guard let point = SlideGeometry.slidePoint(location, in: currentSize, slideSize: presentation.slideSize.points) else {
+                        return
+                    }
+                    if let media = session.mediaShape(at: point) {
+                        session.media.toggle(media)
+                    } else if let link = session.link(at: point), let url = session.follow(link) {
+                        openURL(url)
+                    }
                 }
                 .clipShape(.rect(cornerRadius: 8))
                 .overlay {

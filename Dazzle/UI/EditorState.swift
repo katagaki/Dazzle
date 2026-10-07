@@ -401,6 +401,26 @@ final class EditorState {
         insert(shape, in: &presentation)
     }
 
+    /// Adds a video, as its first frame, fitted into the middle of the slide.
+    func insertVideo(_ video: PreparedVideo, in presentation: inout Presentation) {
+        guard let slide = selectedSlide(in: presentation) else { return }
+        let mediaPath = PackagePath.unused(prefix: "ppt/media/media", suffix: ".mp4", taken: presentation.partNames)
+        presentation.addedParts[mediaPath] = video.data
+        let posterPath = PackagePath.unused(prefix: "ppt/media/image", suffix: ".png", taken: presentation.partNames)
+        presentation.addedParts[posterPath] = video.poster.data
+        let bounds = presentation.slideSize.points
+        let scale = min(bounds.width * 0.6 / max(video.size.width, 1), bounds.height * 0.6 / max(video.size.height, 1))
+        var picture = SlideShape.Picture(imagePath: posterPath)
+        picture.media = SlideShape.Media(kind: .video, path: mediaPath)
+        var shape = SlideShape(
+            shapeID: slide.nextShapeID, name: "Video \(slide.nextShapeID - 1)", kind: .picture(picture),
+            frame: centered(CGSize(width: video.size.width * scale, height: video.size.height * scale), in: presentation)
+        )
+        // The click that plays it in PowerPoint, kept as written.
+        shape.link = .other
+        insert(shape, in: &presentation)
+    }
+
     func deleteSelectedShape(in presentation: inout Presentation) {
         let ids = Set(selectedShapeIDs)
         guard !ids.isEmpty else { return }

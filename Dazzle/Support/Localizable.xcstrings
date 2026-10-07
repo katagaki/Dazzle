@@ -4831,6 +4831,41 @@
         }
       }
     },
+    "Error.UnreadableVideo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The video couldn’t be added."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ビデオを追加できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비디오를 추가할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法添加视频。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法加入影片。"
+          }
+        }
+      }
+    },
     "Error.UnwritablePart" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10111,31 +10146,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Video and audio are shown as their poster frames, and don’t play."
+            "value" : "Some videos or sounds are in formats that can’t be played here, or are linked to files that aren’t in the presentation. Their pictures are shown instead."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ビデオとオーディオはポスターフレームとして表示され、再生されません。"
+            "value" : "一部のビデオやサウンドはここで再生できない形式であるか、プレゼンテーションに含まれていないファイルにリンクされています。代わりに画像が表示されます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "비디오와 오디오는 포스터 프레임으로 표시되며 재생되지 않습니다."
+            "value" : "일부 비디오 또는 사운드가 여기에서 재생할 수 없는 형식이거나 프레젠테이션에 포함되지 않은 파일에 연결되어 있습니다. 대신 해당 사진이 표시됩니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "视频和音频显示为海报帧，不会播放。"
+            "value" : "部分视频或声音的格式无法在此播放，或链接到不在演示文稿中的文件。将改为显示其图片。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "影片和音訊會顯示為海報影格，不會播放。"
+            "value" : "部分影片或聲音的格式無法在此播放，或連結至不在簡報中的檔案。將改為顯示其圖片。"
           }
         }
       }

@@ -1190,3 +1190,54 @@ struct HyperlinkTests {
         session.end()
     }
 }
+
+@Suite("Media")
+@MainActor
+struct MediaTests {
+    @Test("An inserted video is saved as PowerPoint embeds one, plays, and can start by itself")
+    func video() async throws {
+        let blank = Presentation.blank
+        let source = FileManager.default.temporaryDirectory.appending(path: "dazzle-source.mp4")
+        try await VideoExporter.export(blank.slides, of: blank, width: 320, durations: [1], to: source) { _ in }
+        let video = try await PreparedVideo.prepare(from: source)
+
+        var presentation = Presentation.blank
+        let state = EditorState()
+        state.selectSlide(presentation.slides[0].id)
+        state.insertVideo(video, in: &presentation)
+        let data = try PPTXWriter.data(from: presentation)
+        let copy = try PPTXReader.presentation(from: data)
+        let shape = try #require(copy.slides[0].shapes.last)
+        guard case .picture(let picture) = shape.kind, let media = picture.media, let path = media.path else {
+            Issue.record("Expected a video")
+            return
+        }
+        #expect(media.kind == .video)
+        #expect(copy.data(at: path) == video.data)
+        #expect(copy.unsupportedFeatures.isEmpty)
+
+        let playback = MediaPlayback()
+        playback.show(copy.slides[0], in: copy)
+        #expect(playback.players[shape.id] != nil)
+        #expect(!playback.isPlaying(shape.id))
+        playback.stopAll()
+
+        // A play command that runs after the slide starts makes it start by itself.
+        var parts = try ZipArchive.entries(in: data)
+        let slidePath = try #require(copy.slides[0].partName)
+        var xml = String(decoding: try #require(parts[slidePath]), as: UTF8.self)
+        xml = xml.replacingOccurrences(of: "</p:sld>", with: """
+            <p:timing><p:tnLst><p:par><p:cTn id="1" nodeType="tmRoot"><p:childTnLst><p:par><p:cTn id="2" \
+            nodeType="afterEffect" presetClass="mediacall"><p:childTnLst><p:cmd type="call" cmd="playFrom(0.0)"><p:cBhvr>\
+            <p:cTn id="3" dur="1"/><p:tgtEl><p:spTgt spid="\(shape.shapeID)"/></p:tgtEl></p:cBhvr></p:cmd></p:childTnLst>\
+            </p:cTn></p:par></p:childTnLst></p:cTn></p:par></p:tnLst></p:timing></p:sld>
+            """)
+        parts[slidePath] = Data(xml.utf8)
+        let timed = try PPTXReader.presentation(fromParts: parts)
+        guard case .picture(let timedPicture) = try #require(timed.slides[0].shapes.last).kind else {
+            Issue.record("Expected a picture")
+            return
+        }
+        #expect(timedPicture.media?.playsAutomatically == true)
+    }
+}

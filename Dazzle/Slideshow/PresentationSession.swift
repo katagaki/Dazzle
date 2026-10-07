@@ -27,6 +27,8 @@ final class PresentationSession {
     private(set) var lastShownSlideID: Slide.ID?
     /// External displays currently showing the audience view.
     private(set) var externalDisplayCount = 0
+    /// The current slide's videos and sounds.
+    let media = MediaPlayback()
 
     var hasExternalDisplay: Bool { externalDisplayCount > 0 }
 
@@ -95,6 +97,14 @@ final class PresentationSession {
         position = index
         isBlanked = false
         publish()
+    }
+
+    // MARK: - Media
+
+    /// The video or sound at a point on the current slide, in slide points.
+    func mediaShape(at point: CGPoint) -> SlideShape.ID? {
+        guard let slide = currentSlide, !isBlanked else { return nil }
+        return MediaPlayback.media(on: slide).reversed().first { $0.shape.frame.points.contains(point) }?.shape.id
     }
 
     // MARK: - Links
@@ -188,6 +198,7 @@ final class PresentationSession {
     // MARK: - Remote
 
     private func publish() {
+        media.show(isPresenting ? currentSlide : nil, in: presentation)
         var state = RemoteState()
         state.canStart = !candidates.isEmpty
         state.title = isPresenting ? title : candidates.last?.title ?? ""

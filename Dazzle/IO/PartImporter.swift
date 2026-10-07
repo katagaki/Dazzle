@@ -221,6 +221,7 @@ extension SlideShape {
         switch kind {
         case .picture(var picture):
             picture.imagePath = picture.imagePath.map(path)
+            if let old = picture.media?.path { picture.media?.path = path(old) }
             shape.kind = .picture(picture)
         case .group(var group):
             group.children = group.children.map { $0.remapped(xml: xml, path: path) }

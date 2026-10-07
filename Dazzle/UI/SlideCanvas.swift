@@ -9,7 +9,8 @@ import SwiftUI
 /// edit the text. Shift-tap, or tap while selecting several, to add a shape
 /// to the selection; dragging any of them moves them all. Moves, resizes and
 /// turns are previewed live and written to the document once, when the
-/// finger lifts, so each is a single undo step.
+/// finger lifts, so each is a single undo step. Pinch to zoom the slide in;
+/// zoomed in, drag across empty slide to pan, and double-tap it to zoom out.
 struct SlideCanvas: View {
     @Binding var presentation: Presentation
     @Bindable var state: EditorState
@@ -59,24 +60,102 @@ struct SlideCanvas: View {
     /// How far above a shape its rotation handle sits, in view points.
     private static let rotationHandleDistance: CGFloat = 28
 
+    /// How far the slide can be pinched in, over its fitted size.
+    private static let maximumZoom: CGFloat = 4
+
+    /// How far the slide is zoomed in, and how far it is moved from where
+    /// it sits fitted, in view points.
+    private struct Viewport: Equatable {
+        var zoom: CGFloat = 1
+        var pan: CGSize = .zero
+
+        var isZoomed: Bool { zoom > 1 }
+    }
+
+    /// Where the slide sits fitted to the space the canvas has.
+    private struct Fitting {
+        var slideSize: CGSize
+        var available: CGSize
+        /// The scale at which the whole slide fits.
+        var scale: CGFloat
+        /// The slide's centre when it is not moved.
+        var center: CGPoint
+
+        /// `pan` held so that a slide zoomed past the space never leaves it
+        /// partly empty, and one that fits stays put.
+        func clamped(_ pan: CGSize, zoom: CGFloat) -> CGSize {
+            let reachX = max((slideSize.width * scale * zoom - available.width) / 2, 0)
+            let reachY = max((slideSize.height * scale * zoom - available.height) / 2, 0)
+            return CGSize(width: min(max(pan.width, -reachX), reachX), height: min(max(pan.height, -reachY), reachY))
+        }
+    }
+
+    @State private var viewport = Viewport()
+    /// The viewport a pinch in progress would leave, shown by stretching
+    /// the slide rather than redrawing it; taken up when the fingers lift.
+    @State private var pinch: Viewport?
+    /// Where the slide was moved to when a drag across it began panning.
+    @State private var panOrigin: CGSize?
+
     var body: some View {
         GeometryReader { proxy in
             let slideSize = presentation.slideSize.points
             let available = CGSize(width: max(proxy.size.width - 32, 1), height: max(proxy.size.height - 32, 1))
-            let scale = min(available.width / slideSize.width, available.height / slideSize.height)
+            let fitScale = min(available.width / slideSize.width, available.height / slideSize.height)
+            let fitting = Fitting(
+                slideSize: slideSize, available: available, scale: fitScale,
+                center: CGPoint(x: proxy.size.width / 2, y: isRaised ? 16 + slideSize.height * fitScale / 2 : proxy.size.height / 2)
+            )
+            let scale = fitScale * viewport.zoom
             let size = CGSize(width: slideSize.width * scale, height: slideSize.height * scale)
-            if let slide = state.selectedSlide(in: presentation) {
-                canvas(for: slide, scale: scale, size: size)
-                    .frame(width: size.width, height: size.height)
-                    .position(x: proxy.size.width / 2, y: isRaised ? 16 + size.height / 2 : proxy.size.height / 2)
-                    .animation(.snappy(duration: 0.3), value: isRaised)
+            let shown = pinch ?? viewport
+            ZStack {
+                Color.clear
+                    .contentShape(.rect)
+                if let slide = state.selectedSlide(in: presentation) {
+                    canvas(for: slide, scale: scale, size: size, fitting: fitting)
+                        .frame(width: size.width, height: size.height)
+                        .scaleEffect(shown.zoom / viewport.zoom)
+                        .position(x: fitting.center.x + shown.pan.width, y: fitting.center.y + shown.pan.height)
+                        .animation(.snappy(duration: 0.3), value: isRaised)
+                }
             }
+            .coordinateSpace(.named(Self.viewportSpace))
+            .simultaneousGesture(magnifyGesture(fitting: fitting), including: state.isDrawing ? .subviews : .all)
         }
+        // Zoomed in, the slide stays within the canvas rather than running
+        // under the sidebar; fitted, its handles may reach past the edges.
+        .clipShape(Rectangle().inset(by: (pinch ?? viewport).isZoomed ? 0 : -1000))
+        .onChange(of: state.selectedSlideID) { viewport = Viewport() }
+    }
+
+    // MARK: - Zooming
+
+    /// Pinching zooms the slide in or out about the point between the
+    /// fingers, no further out than fitted.
+    private func magnifyGesture(fitting: Fitting) -> some Gesture {
+        MagnifyGesture(minimumScaleDelta: 0.01)
+            .onChanged { value in
+                let zoom = min(max(viewport.zoom * value.magnification, 1), Self.maximumZoom)
+                let ratio = zoom / viewport.zoom
+                // The slide point under the fingers stays under them.
+                let anchor = value.startLocation
+                let center = CGPoint(x: fitting.center.x + viewport.pan.width, y: fitting.center.y + viewport.pan.height)
+                let pan = CGSize(
+                    width: anchor.x - (anchor.x - center.x) * ratio - fitting.center.x,
+                    height: anchor.y - (anchor.y - center.y) * ratio - fitting.center.y
+                )
+                pinch = Viewport(zoom: zoom, pan: fitting.clamped(pan, zoom: zoom))
+            }
+            .onEnded { _ in
+                if let pinch { viewport = pinch }
+                pinch = nil
+            }
     }
 
     // MARK: - Canvas
 
-    private func canvas(for slide: Slide, scale: CGFloat, size: CGSize) -> some View {
+    private func canvas(for slide: Slide, scale: CGFloat, size: CGSize, fitting: Fitting) -> some View {
         let displayed = preview(of: slide)
         return ZStack(alignment: .topLeading) {
             SlideView(presentation: presentation, slide: displayed, options: renderOptions)
@@ -84,7 +163,7 @@ struct SlideCanvas: View {
                 .clipShape(.rect(cornerRadius: 3))
                 .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
                 .contentShape(.rect)
-                .gesture(moveGesture(on: slide, scale: scale))
+                .gesture(moveGesture(on: slide, scale: scale, size: size, fitting: fitting))
                 .simultaneousGesture(tapGestures(on: slide, scale: scale))
                 .accessibilityIdentifier("slideCanvas")
 
@@ -372,7 +451,13 @@ struct SlideCanvas: View {
     private func tapGestures(on slide: Slide, scale: CGFloat) -> some Gesture {
         let doubleTap = SpatialTapGesture(count: 2).onEnded { value in
             let point = CGPoint(x: value.location.x / scale, y: value.location.y / scale)
-            guard let shape = shape(at: point, on: slide, scale: scale) else { return }
+            guard let shape = shape(at: point, on: slide, scale: scale) else {
+                // Double-tapping empty slide fits a zoomed slide back.
+                if viewport.isZoomed {
+                    withAnimation(.snappy(duration: 0.3)) { viewport = Viewport() }
+                }
+                return
+            }
             if case .table(let table) = shape.kind, shape.isEditable, slide.canEditShapes {
                 state.selectedShapeID = shape.id
                 state.selectCell(tableLayout(table, shape: shape, on: slide).cell(at: point), editing: true)
@@ -410,22 +495,40 @@ struct SlideCanvas: View {
             || keyboard.button(forKeyCode: .rightShift)?.isPressed == true
     }
 
-    private func moveGesture(on slide: Slide, scale: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 6)
+    /// Dragging a shape moves it. Across empty slide, a drag pans the slide
+    /// when it is zoomed in, and otherwise swipes to the neighbouring slide.
+    private func moveGesture(on slide: Slide, scale: CGFloat, size: CGSize, fitting: Fitting) -> some Gesture {
+        // Measured where the slide sits, not on it, so it holds still under
+        // the finger as the slide pans.
+        DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.viewportSpace))
             .onChanged { value in
-                if interaction == nil {
-                    let start = CGPoint(x: value.startLocation.x / scale, y: value.startLocation.y / scale)
-                    guard let shape = shape(at: start, on: slide, scale: scale), shape.isEditable,
-                          slide.canEditShapes else { return }
-                    // Dragging one of the selection moves the whole selection.
-                    if !state.isSelected(shape.id) {
-                        if state.isSelectingMultiple {
-                            state.toggleSelection(shape.id)
-                        } else {
-                            state.selectedShapeID = shape.id
+                guard pinch == nil else { return }
+                if interaction == nil, panOrigin == nil {
+                    let origin = CGPoint(
+                        x: fitting.center.x + viewport.pan.width - size.width / 2,
+                        y: fitting.center.y + viewport.pan.height - size.height / 2
+                    )
+                    let start = CGPoint(
+                        x: (value.startLocation.x - origin.x) / scale, y: (value.startLocation.y - origin.y) / scale
+                    )
+                    if let shape = shape(at: start, on: slide, scale: scale), shape.isEditable, slide.canEditShapes {
+                        // Dragging one of the selection moves the whole selection.
+                        if !state.isSelected(shape.id) {
+                            if state.isSelectingMultiple {
+                                state.toggleSelection(shape.id)
+                            } else {
+                                state.selectedShapeID = shape.id
+                            }
                         }
+                        interaction = Interaction(shapes: slide.shapes.filter { state.isSelected($0.id) && $0.isEditable })
+                    } else if viewport.isZoomed {
+                        panOrigin = viewport.pan
                     }
-                    interaction = Interaction(shapes: slide.shapes.filter { state.isSelected($0.id) && $0.isEditable })
+                }
+                if let panOrigin {
+                    let pan = CGSize(width: panOrigin.width + value.translation.width, height: panOrigin.height + value.translation.height)
+                    viewport.pan = fitting.clamped(pan, zoom: viewport.zoom)
+                    return
                 }
                 guard var current = interaction else { return }
                 var translation = CGSize(width: value.translation.width / scale, height: value.translation.height / scale)
@@ -446,10 +549,12 @@ struct SlideCanvas: View {
             }
             .onEnded { value in
                 guides = []
-                if let interaction {
+                if panOrigin != nil {
+                    panOrigin = nil
+                } else if let interaction {
                     commit(interaction)
                     self.interaction = nil
-                } else if abs(value.translation.width) > 60, abs(value.translation.width) > abs(value.translation.height) * 1.5 {
+                } else if !viewport.isZoomed, pinch == nil, abs(value.translation.width) > 60, abs(value.translation.width) > abs(value.translation.height) * 1.5 {
                     onSwipe(value.translation.width < 0)
                 }
             }
@@ -714,6 +819,9 @@ struct SlideCanvas: View {
     }
 
     private static let coordinateSpace = "slideCanvas"
+    /// The space the slide is fitted, zoomed and moved in, which stays put
+    /// while the slide pans.
+    private static let viewportSpace = "slideCanvasViewport"
 
     /// `point` turned `degrees` clockwise round `center`, in a y-down space.
     static func rotate(_ point: CGPoint, around center: CGPoint, by degrees: Double) -> CGPoint {

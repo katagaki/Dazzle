@@ -16,7 +16,8 @@ struct SlideCanvas: View {
     @Bindable var state: EditorState
     /// Swiping across empty slide moves to the neighbouring slide.
     var onSwipe: (_ forward: Bool) -> Void = { _ in /* No neighbouring slides to move to. */ }
-    /// Lift the slide to the top, clear of a panel covering the lower half.
+    /// Lift the slide to the top, clear of a panel covering the lower half
+    /// on iPhone or floating over the middle on iPad.
     var isRaised = false
 
     /// A move, resize or turn in progress, in slide points and degrees.

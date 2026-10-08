@@ -34,7 +34,7 @@ struct DeckView: View {
                 }
                 SlideCanvas(
                     presentation: presentation, state: state, onSwipe: step,
-                    isRaised: horizontalSizeClass == .compact && state.presentedPanel != nil
+                    isRaised: state.presentedPanel != nil
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .bottom) {

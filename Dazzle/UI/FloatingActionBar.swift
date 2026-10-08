@@ -91,6 +91,8 @@ struct FloatingActionBar: View {
             .accessibilityIdentifier("comments")
             panelAction("paintpalette", label: "ActionBar.Format", panel: .format)
                 .accessibilityIdentifier("format")
+            panelAction("sparkles", label: "ActionBar.Animations", panel: .animations)
+                .accessibilityIdentifier("animations")
         }
     }
 

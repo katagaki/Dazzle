@@ -158,7 +158,9 @@ struct SlideCanvas: View {
     private func canvas(for slide: Slide, scale: CGFloat, size: CGSize, fitting: Fitting) -> some View {
         let displayed = preview(of: slide)
         return ZStack(alignment: .topLeading) {
-            SlideView(presentation: presentation, slide: displayed, options: renderOptions)
+            TimelineView(.animation(paused: state.animationPreviewStartedAt == nil)) { timeline in
+                SlideView(presentation: presentation, slide: displayed, options: renderOptions(for: displayed, at: timeline.date))
+            }
                 .frame(width: size.width, height: size.height)
                 .clipShape(.rect(cornerRadius: 3))
                 .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
@@ -171,6 +173,10 @@ struct SlideCanvas: View {
 
             if !state.isDrawing {
                 commentPins(on: slide, scale: scale)
+            }
+
+            if state.presentedPanel == .animations, state.animationPreviewStartedAt == nil {
+                animationBadges(on: displayed, scale: scale)
             }
 
             if !state.isDrawing {
@@ -210,13 +216,44 @@ struct SlideCanvas: View {
         .coordinateSpace(.named(Self.coordinateSpace))
     }
 
-    private var renderOptions: SlideRenderer.Options {
+    private func renderOptions(for slide: Slide, at date: Date) -> SlideRenderer.Options {
         var options = SlideRenderer.Options.editing
         options.bulletsOnlyShapeID = state.editingTextShapeID
         if state.isEditingCell, let id = state.selectedShapeID, let position = state.selectedCell {
             options.editingCell = TableEditingCell(shapeID: id, position: position)
         }
+        if let started = state.animationPreviewStartedAt {
+            options.animation = slide.animationTimeline.playingThrough(
+                at: date.timeIntervalSince(started), shapes: slide.shapes, slideSize: presentation.slideSize.points
+            )
+        }
         return options
+    }
+
+    // MARK: - Animations
+
+    /// While the animations panel is up, a tag by each animated shape with
+    /// the taps that set off its effects, as PowerPoint numbers them.
+    private func animationBadges(on slide: Slide, scale: CGFloat) -> some View {
+        let timeline = slide.animationTimeline
+        let animations = slide.playableAnimations
+        let frames = Dictionary(slide.shapes.map { ($0.shapeID, $0.frame.points) }) { first, _ in first }
+        let shapeIDs = animations.map(\.shapeID).reduce(into: [Int]()) { if !$0.contains($1) { $0.append($1) } }
+        return ForEach(shapeIDs, id: \.self) { shapeID in
+            let labels = animations.filter { $0.shapeID == shapeID }
+                .map { timeline.tapNumber(of: $0.id).map(String.init) ?? "0" }
+                .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+            let frame = frames[shapeID] ?? .zero
+            Text(labels.joined(separator: ", "))
+                .font(.system(size: 10, weight: .bold).monospacedDigit())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.accentColor, in: .rect(cornerRadius: 4))
+                .offset(x: frame.minX * scale - 4, y: frame.minY * scale - 8)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 
     // MARK: - Comments

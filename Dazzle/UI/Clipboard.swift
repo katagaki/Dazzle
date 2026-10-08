@@ -210,6 +210,8 @@ extension EditorState {
         copy.autoAdvanceAfter = original.autoAdvanceAfter
         copy.advancesOnClick = original.advancesOnClick
         copy.isTransitionModified = original.isTransitionModified
+        copy.animations = original.animations.map { ShapeAnimation(copying: $0) }
+        copy.areAnimationsModified = original.areAnimationsModified
         // Notes and comments belong to one slide; the copy gets its own notes.
         copy.relationships.removeAll {
             $0.type == OOXML.RelationshipType.notesSlide || $0.type == OOXML.RelationshipType.comments
@@ -248,6 +250,14 @@ extension EditorState {
         copy.autoAdvanceAfter = slide.autoAdvanceAfter
         copy.advancesOnClick = slide.advancesOnClick
         copy.isTransitionModified = slide.autoAdvanceAfter != nil || !slide.advancesOnClick
+        // Effects as read may name the other file's parts, such as a sound;
+        // only those Dazzle can write anew come across.
+        copy.animations = slide.animations.filter(\.effect.isMadeByDazzle).map { animation in
+            var copied = ShapeAnimation(copying: animation)
+            copied.source = nil
+            return copied
+        }
+        copy.areAnimationsModified = !copy.animations.isEmpty
         copy.notes = slide.notes
         copy.areNotesModified = !slide.notes.isEmpty
         copy.isModified = true

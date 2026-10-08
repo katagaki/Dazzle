@@ -193,9 +193,9 @@ private struct PackageBuilder {
             }
         }
         slide.relationships = writer.relationships
-        if slide.hasRemovedShapes, let timing = root.firstChild(named: "timing") {
-            // Animations name shapes by id; with one gone they point at nothing.
-            root.removeChild(timing)
+        if slide.areAnimationsModified || slide.hasRemovedShapes {
+            // Animations name shapes by id; with one gone, some point at nothing.
+            AnimationXML.write(slide.animations, shapes: slide.shapes, into: root)
         }
         guard let xml = XMLLite.serialize(root) else { throw PresentationWriteError.unwritablePart(path) }
         return Data((PackagePath.declaration + xml).utf8)

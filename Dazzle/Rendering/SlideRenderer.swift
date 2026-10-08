@@ -18,6 +18,9 @@ struct SlideRenderer {
         /// Draw the background and the master's and layout's artwork. Off,
         /// the slide's own shapes are drawn on nothing, for a picture of them alone.
         var drawsBackground = true
+        /// How far through their animations the slide's shapes are, in a
+        /// slideshow. Without one, every shape is drawn as it sits.
+        var animation: AnimationFrame?
 
         static let presentation = Options()
         static let editing = Options(showsPlaceholderPrompts: true)
@@ -62,7 +65,11 @@ struct SlideRenderer {
             }
         }
         for shape in slide.shapes where shape.id != options.hiddenShapeID {
-            draw(shape, sources: style.sources(for: shape), style: style, context: context)
+            draw(
+                shape, sources: style.sources(for: shape), style: style, context: context,
+                appearance: options.animation?.shapes[shape.shapeID],
+                paragraphOpacity: options.animation?.paragraphs[shape.shapeID] ?? [:]
+            )
         }
         context.restoreGState()
     }
@@ -93,11 +100,15 @@ struct SlideRenderer {
 
     private func draw(
         _ shape: SlideShape, sources: [SlideShape], style: SlideStyleContext, context: CGContext,
-        groupFill: SlideStyleContext.ResolvedFill? = nil
+        groupFill: SlideStyleContext.ResolvedFill? = nil, appearance: AnimatedAppearance? = nil,
+        paragraphOpacity: [Int: Double] = [:]
     ) {
         let frame = shape.frame.points
+        if let appearance, appearance.opacity <= 0.001 { return }
         context.saveGState()
         defer { context.restoreGState() }
+        let isFaded = appearance.map { Self.apply($0, to: frame, context: context) } ?? false
+        defer { if isFaded { context.endTransparencyLayer() } }
         if shape.rotation != 0 || shape.flipsHorizontally || shape.flipsVertically {
             context.translateBy(x: frame.midX, y: frame.midY)
             context.rotate(by: shape.rotation * .pi / 180)
@@ -148,8 +159,43 @@ struct SlideRenderer {
                 drawStandIn(label, frame: frame, context: context, isChart: false)
             }
         case .shape, .connector:
-            drawAutoShape(shape, sources: sources, frame: frame, style: style, context: context, groupFill: groupFill)
+            drawAutoShape(
+                shape, sources: sources, frame: frame, style: style, context: context, groupFill: groupFill,
+                paragraphOpacity: paragraphOpacity
+            )
         }
+    }
+
+    /// Moves, sizes, turns, wipes and fades what is drawn next as an
+    /// animation has left the shape. Returns whether it began a transparency
+    /// layer, for the caller to end.
+    private static func apply(_ appearance: AnimatedAppearance, to frame: CGRect, context: CGContext) -> Bool {
+        context.translateBy(x: appearance.offset.width, y: appearance.offset.height)
+        if appearance.scale != 1 || appearance.rotation != 0 {
+            let scale = max(appearance.scale, 0.0001)
+            context.translateBy(x: frame.midX, y: frame.midY)
+            context.rotate(by: appearance.rotation * .pi / 180)
+            context.scaleBy(x: scale, y: scale)
+            context.translateBy(x: -frame.midX, y: -frame.midY)
+        }
+        if let reveal = appearance.reveal {
+            // Open on every side but the one the wipe is moving, so outlines
+            // and shadows there are not cut off.
+            let far: CGFloat = 100_000
+            let fraction = CGFloat(min(max(reveal.fraction, 0), 1))
+            let shown = switch reveal.edge {
+            case .top: CGRect(x: -far, y: frame.minY + frame.height * fraction - far, width: 2 * far, height: far)
+            case .bottom: CGRect(x: -far, y: frame.maxY - frame.height * fraction, width: 2 * far, height: far)
+            case .left: CGRect(x: frame.minX + frame.width * fraction - far, y: -far, width: far, height: 2 * far)
+            case .right: CGRect(x: frame.maxX - frame.width * fraction, y: -far, width: far, height: 2 * far)
+            }
+            context.clip(to: shown)
+        }
+        guard appearance.opacity < 1 else { return false }
+        // Faded as one, so overlapping parts of the shape do not show through each other.
+        context.setAlpha(appearance.opacity)
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        return true
     }
 
     /// A group member moved from the group's child space into its frame.
@@ -184,7 +230,7 @@ struct SlideRenderer {
 
     private func drawAutoShape(
         _ shape: SlideShape, sources: [SlideShape], frame: CGRect, style: SlideStyleContext, context: CGContext,
-        groupFill: SlideStyleContext.ResolvedFill?
+        groupFill: SlideStyleContext.ResolvedFill?, paragraphOpacity: [Int: Double] = [:]
     ) {
         let (fillPath, strokePath, isOpen) = outline(of: shape, in: frame)
         if !isOpen, var fill = style.fill(for: shape, sources: sources) {
@@ -201,7 +247,10 @@ struct SlideRenderer {
         let renderer = TextRenderer(style: style, slideNumber: slideNumber)
         let bulletsOnly = shape.id == options.bulletsOnlyShapeID
         if let text = shape.text, !text.isEmpty {
-            renderer.draw(text, shape: shape, sources: sources, in: textFrame, context: context, hidesText: bulletsOnly)
+            renderer.draw(
+                text, shape: shape, sources: sources, in: textFrame, context: context, hidesText: bulletsOnly,
+                paragraphOpacity: paragraphOpacity
+            )
         } else if bulletsOnly {
             return
         } else if options.showsPlaceholderPrompts, let placeholder = shape.placeholder, !placeholder.isFurniture {

@@ -37,7 +37,7 @@ struct AudienceView: View {
             Color.black.ignoresSafeArea()
             if session.isPresenting, let presentation = session.presentation, let slide = session.currentSlide {
                 if !session.isBlanked {
-                    SlideView(presentation: presentation, slide: slide)
+                    ShowingSlideView(session: session, presentation: presentation, slide: slide)
                         .aspectRatio(presentation.slideSize.aspectRatio, contentMode: .fit)
                         .overlay {
                             MediaOverlay(

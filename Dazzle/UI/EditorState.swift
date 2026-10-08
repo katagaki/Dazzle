@@ -10,6 +10,7 @@ enum EditorPanel: String, Identifiable, Hashable {
     case chart
     case comments
     case headerFooter
+    case animations
 
     var id: String { rawValue }
 
@@ -19,6 +20,7 @@ enum EditorPanel: String, Identifiable, Hashable {
         case .chart: String(localized: "Panel.Chart.Title")
         case .comments: String(localized: "Panel.Comments.Title")
         case .headerFooter: String(localized: "Panel.HeaderFooter.Title")
+        case .animations: String(localized: "Panel.Animations.Title")
         case .text: String(localized: "Panel.Text.Title")
         case .format: String(localized: "Panel.Format.Title")
         case .notes: String(localized: "Panel.Notes.Title")
@@ -56,6 +58,9 @@ final class EditorState {
     var isShowingUnsupportedFeatureNotice = false
     /// What the export panel opens on.
     var exportFormat: ExportOptions.Format = .pdf
+    /// When the canvas began playing the slide's animations through, while it is.
+    private(set) var animationPreviewStartedAt: Date?
+    @ObservationIgnored private var animationPreviewTask: Task<Void, Never>?
 
     // MARK: - Selection
 
@@ -118,6 +123,7 @@ final class EditorState {
         guard id != selectedSlideID else { return }
         selectedSlideID = id
         selectedShapeID = nil
+        stopPreviewingAnimations()
         if presentedPanel == .text { presentedPanel = nil }
     }
 
@@ -309,6 +315,81 @@ final class EditorState {
         }
     }
 
+    // MARK: - Animations
+
+    /// Animates each selected shape with `effect`: the first on the next
+    /// tap, the rest along with it. Returns the first new animation.
+    @discardableResult
+    func addAnimation(
+        _ effect: ShapeAnimation.Effect, category: ShapeAnimation.Category, in presentation: inout Presentation
+    ) -> ShapeAnimation.ID? {
+        let shapes = selectedShapes(in: presentation).filter(\.isEditable)
+        guard !shapes.isEmpty else { return nil }
+        let added = shapes.enumerated().map { index, shape in
+            ShapeAnimation(shapeID: shape.shapeID, category: category, effect: effect, trigger: index == 0 ? .onClick : .withPrevious)
+        }
+        updateAnimations(in: &presentation) { $0 += added }
+        return added.first?.id
+    }
+
+    /// Changes one animation. Changing what it does, rather than when it
+    /// starts, means writing it anew, so what was read is let go.
+    func updateAnimation(
+        _ id: ShapeAnimation.ID, in presentation: inout Presentation, _ change: (inout ShapeAnimation) -> Void
+    ) {
+        updateAnimations(in: &presentation) { animations in
+            guard let index = animations.firstIndex(where: { $0.id == id }) else { return }
+            var animation = animations[index]
+            change(&animation)
+            if animation.effect != animations[index].effect || animation.duration != animations[index].duration {
+                animation.source = nil
+            }
+            animations[index] = animation
+        }
+    }
+
+    func setEffect(_ effect: ShapeAnimation.Effect, of id: ShapeAnimation.ID, in presentation: inout Presentation) {
+        updateAnimation(id, in: &presentation) { animation in
+            // Another effect starts at its own length; another edge keeps the one chosen.
+            if !animation.effect.isKind(of: effect) { animation.duration = effect.defaultDuration }
+            animation.effect = effect
+        }
+    }
+
+    func deleteAnimations(_ ids: Set<ShapeAnimation.ID>, in presentation: inout Presentation) {
+        updateAnimations(in: &presentation) { $0.removeAll { ids.contains($0.id) } }
+    }
+
+    func moveAnimations(from offsets: IndexSet, to destination: Int, in presentation: inout Presentation) {
+        updateAnimations(in: &presentation) { $0.move(fromOffsets: offsets, toOffset: destination) }
+    }
+
+    private func updateAnimations(in presentation: inout Presentation, _ change: (inout [ShapeAnimation]) -> Void) {
+        updateSlide(in: &presentation) { slide in
+            let before = slide.animations
+            change(&slide.animations)
+            if slide.animations != before { slide.areAnimationsModified = true }
+        }
+    }
+
+    /// Plays the slide's animations through on the canvas, one step after another.
+    func previewAnimations(in presentation: Presentation) {
+        guard let slide = selectedSlide(in: presentation), !slide.animations.isEmpty else { return }
+        animationPreviewTask?.cancel()
+        animationPreviewStartedAt = Date()
+        let duration = slide.animationTimeline.playingThroughDuration + 0.6
+        animationPreviewTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(duration))
+            guard !Task.isCancelled else { return }
+            self?.animationPreviewStartedAt = nil
+        }
+    }
+
+    func stopPreviewingAnimations() {
+        animationPreviewTask?.cancel()
+        animationPreviewStartedAt = nil
+    }
+
     func setLoopsSlideshow(_ isOn: Bool, in presentation: inout Presentation) {
         presentation.loopsSlideshow = isOn
         presentation.isShowSettingsModified = true
@@ -328,8 +409,15 @@ final class EditorState {
     private func updateSlide(in presentation: inout Presentation, _ change: (inout Slide) -> Void) {
         let index = selectedIndex(in: presentation)
         guard presentation.slides.indices.contains(index), presentation.slides[index].canEditShapes else { return }
+        let before = Set(presentation.slides[index].shapes.map(\.shapeID))
         change(&presentation.slides[index])
         presentation.slides[index].isModified = true
+        // Animations go with the shapes they animate.
+        let removed = before.subtracting(presentation.slides[index].shapes.map(\.shapeID))
+        if presentation.slides[index].animations.contains(where: { removed.contains($0.shapeID) }) {
+            presentation.slides[index].animations.removeAll { removed.contains($0.shapeID) }
+            presentation.slides[index].areAnimationsModified = true
+        }
     }
 
     /// Changes one shape, noting which parts of it were changed.

@@ -267,6 +267,8 @@ enum PPTXReader {
         slide.background = Background(element: root.firstChild(named: "cSld")?.firstChild(named: "bg"), image: parser.target(of:))
         slide.isHidden = root.attribute("show") == "0"
         if let transition = transitions(in: root).first {
+            // An effect inside it is a transition Dazzle shows as a cut.
+            if !transition.children.isEmpty { features.insert(.transitions) }
             slide.autoAdvanceAfter = transition.attribute("advTm").flatMap(Double.init).map { $0 / 1_000 }
             slide.advancesOnClick = transition.attribute("advClick") != "0"
         }
@@ -274,7 +276,7 @@ enum PPTXReader {
         slide.canEditShapes = !parser.hasUncapturableShape
         features.formUnion(parser.features)
         if let timing = root.firstChild(named: "timing") {
-            features.insert(.animations)
+            slide.animations = AnimationXML.animations(in: timing)
             markAutoplay(in: timing, shapes: &slide.shapes)
         }
 

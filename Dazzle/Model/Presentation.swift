@@ -2,8 +2,8 @@ import Foundation
 
 /// A whole presentation: its slides, and the package they came from.
 ///
-/// Dazzle models what it draws and edits. Everything else — animations,
-/// charts, embedded objects, custom XML, macros — stays in `package` exactly
+/// Dazzle models what it draws and edits. Everything else — transitions,
+/// embedded objects, custom XML, macros — stays in `package` exactly
 /// as it was read and is written back untouched.
 struct Presentation: Equatable, Sendable {
     var slideSize: EMUSize
@@ -132,6 +132,9 @@ struct Slide: Identifiable, Equatable, Sendable {
     /// Whether a tap or click moves the slideshow on.
     var advancesOnClick = true
     var isTransitionModified = false
+    /// The effects the slideshow plays as the slide is tapped through.
+    var animations: [ShapeAnimation] = []
+    var areAnimationsModified = false
     var legacyCommentsPart: String?
     var modernCommentsPart: String?
     var areCommentsModified = false
@@ -143,7 +146,8 @@ struct Slide: Identifiable, Equatable, Sendable {
     /// individually. When not, the slide is kept exactly as it was.
     var canEditShapes = true
     /// Whether a shape was removed, which leaves animations pointing at
-    /// nothing. Those are dropped on save.
+    /// nothing. Those are dropped on save, along with anything else in the
+    /// slide's timing that names it.
     var hasRemovedShapes = false
 
     init(id: UUID = UUID(), layoutPath: String, relationships: [Relationship] = [], shapes: [SlideShape] = []) {
@@ -158,6 +162,14 @@ struct Slide: Identifiable, Equatable, Sendable {
         shapes.first { $0.placeholder?.isTitle == true }?.text?.plainText
             .replacingOccurrences(of: "\n", with: " ").trimmed.nilIfEmpty
     }
+
+    /// The animations whose shapes are still on the slide, in playing order.
+    var playableAnimations: [ShapeAnimation] {
+        let ids = Set(shapes.map(\.shapeID))
+        return animations.filter { ids.contains($0.shapeID) }
+    }
+
+    var animationTimeline: AnimationTimeline { AnimationTimeline(animations: playableAnimations) }
 
     /// The first `cNvPr id` no shape on the slide uses.
     var nextShapeID: Int {
@@ -180,7 +192,7 @@ struct UnsupportedFeatureReport: Equatable, Sendable {
         case charts
         case media
         case embeddedObjects
-        case animations
+        case transitions
 
         var message: String {
             switch self {
@@ -188,7 +200,7 @@ struct UnsupportedFeatureReport: Equatable, Sendable {
             case .charts: String(localized: "Notice.Feature.Charts")
             case .media: String(localized: "Notice.Feature.Media")
             case .embeddedObjects: String(localized: "Notice.Feature.EmbeddedObjects")
-            case .animations: String(localized: "Notice.Feature.Animations")
+            case .transitions: String(localized: "Notice.Feature.Transitions")
             }
         }
     }

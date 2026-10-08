@@ -20,7 +20,7 @@ struct TextRenderer {
 
     private func layout(
         _ body: TextBody, shape: SlideShape, sources: [SlideShape], in rect: CGRect,
-        colorOverride: RGBAColor?, hidesText: Bool
+        colorOverride: RGBAColor?, hidesText: Bool, paragraphOpacity: [Int: Double] = [:]
     ) -> Layout? {
         let properties = style.bodyProperties(for: shape, sources: sources)
             .merged(over: body.properties)
@@ -50,7 +50,7 @@ struct TextRenderer {
 
         var string = attributedString(
             body, shape: shape, sources: sources, scale: fontScale, spacingReduction: spacingReduction,
-            colorOverride: colorOverride, hidesText: hidesText
+            colorOverride: colorOverride, hidesText: hidesText, paragraphOpacity: paragraphOpacity
         )
         var framesetter = CTFramesetterCreateWithAttributedString(string)
         var size = suggestedSize(framesetter, string: string, width: layoutWidth)
@@ -60,7 +60,7 @@ struct TextRenderer {
             for scale in stride(from: 0.9, through: 0.3, by: -0.1) {
                 string = attributedString(
                     body, shape: shape, sources: sources, scale: scale, spacingReduction: 0.1, colorOverride: colorOverride,
-                    hidesText: hidesText
+                    hidesText: hidesText, paragraphOpacity: paragraphOpacity
                 )
                 framesetter = CTFramesetterCreateWithAttributedString(string)
                 size = suggestedSize(framesetter, string: string, width: layoutWidth)
@@ -93,11 +93,15 @@ struct TextRenderer {
     /// Draws `body` into `rect`, in a context whose y axis points down.
     /// `colorOverride` replaces every colour, for placeholder prompts.
     /// `hidesText` lays the text out but draws only its bullets.
+    /// `paragraphOpacity` fades paragraphs a slideshow is building, by index.
     func draw(
         _ body: TextBody, shape: SlideShape, sources: [SlideShape], in rect: CGRect, context: CGContext,
-        colorOverride: RGBAColor? = nil, hidesText: Bool = false
+        colorOverride: RGBAColor? = nil, hidesText: Bool = false, paragraphOpacity: [Int: Double] = [:]
     ) {
-        guard let layout = layout(body, shape: shape, sources: sources, in: rect, colorOverride: colorOverride, hidesText: hidesText) else {
+        guard let layout = layout(
+            body, shape: shape, sources: sources, in: rect, colorOverride: colorOverride, hidesText: hidesText,
+            paragraphOpacity: paragraphOpacity
+        ) else {
             return
         }
         context.saveGState()
@@ -191,7 +195,7 @@ struct TextRenderer {
 
     func attributedString(
         _ body: TextBody, shape: SlideShape, sources: [SlideShape], scale: Double, spacingReduction: Double,
-        colorOverride: RGBAColor?, hidesText: Bool = false
+        colorOverride: RGBAColor?, hidesText: Bool = false, paragraphOpacity: [Int: Double] = [:]
     ) -> NSAttributedString {
         let textColor = hidesText ? RGBAColor(red: 0, green: 0, blue: 0, alpha: 0) : colorOverride
         let result = NSMutableAttributedString()
@@ -269,6 +273,14 @@ struct TextRenderer {
             }
 
             let range = NSRange(location: start, length: result.length - start)
+            // A paragraph not yet built in keeps its place, bullet and all, unseen.
+            if let opacity = paragraphOpacity[index], opacity < 1, range.length > 0 {
+                result.enumerateAttribute(Self.colorKey, in: range) { value, subrange, _ in
+                    guard let value, CFGetTypeID(value as CFTypeRef) == CGColor.typeID else { return }
+                    let color = value as! CGColor // swiftlint:disable:this force_cast
+                    result.addAttribute(Self.colorKey, value: color.copy(alpha: color.alpha * opacity) ?? color, range: subrange)
+                }
+            }
             if range.length > 0 {
                 result.addAttribute(
                     Self.paragraphKey,

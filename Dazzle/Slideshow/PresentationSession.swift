@@ -31,10 +31,18 @@ final class PresentationSession {
     let media = MediaPlayback()
     /// Whether the show starts over after its last slide.
     private(set) var loops = false
+    /// How many of the current slide's animation steps have begun.
+    private(set) var builds = 0
+    /// When the latest of them began.
+    private(set) var buildStartedAt = Date.distantPast
+    /// Whether an animation is running, so views showing the slide redraw
+    /// every frame only while there is something to see.
+    private(set) var isAnimating = false
+    @ObservationIgnored private var animatingTask: Task<Void, Never>?
     /// Moving on by itself, after the current slide's time.
     @ObservationIgnored private var advanceTask: Task<Void, Never>?
     /// What the running wait is for, so publishing again does not restart it.
-    @ObservationIgnored private var advanceFor: (position: Int, blanked: Bool, presenting: Bool)?
+    @ObservationIgnored private var advanceFor: (position: Int, builds: Int, blanked: Bool, presenting: Bool)?
 
     var hasExternalDisplay: Bool { externalDisplayCount > 0 }
 
@@ -61,6 +69,7 @@ final class PresentationSession {
         ownerID = owner
         loops = presentation.loopsSlideshow
         isPresenting = true
+        beginSlide()
         publish()
     }
 
@@ -74,19 +83,30 @@ final class PresentationSession {
         presentation = nil
         order = []
         position = 0
+        builds = 0
+        isAnimating = false
+        animatingTask?.cancel()
         publish()
     }
 
     // MARK: - Moving
 
+    /// Plays the slide's next animation step, or with none left, moves on.
     func next() {
         guard isPresenting else { return }
         if isBlanked {
             isBlanked = false
+        } else if hasStepsLeft {
+            builds += 1
+            buildStartedAt = Date()
+            trackAnimation()
+            playMedia(inStep: builds - 1)
         } else if position < order.count - 1 {
             position += 1
+            beginSlide()
         } else if loops {
             position = 0
+            beginSlide()
         } else {
             // Moving on from the last slide ends the show, as in Keynote.
             return end()
@@ -94,30 +114,49 @@ final class PresentationSession {
         publish()
     }
 
-    /// Whether a tap on the slide moves the show on, as the slide says.
-    var advancesOnTap: Bool { currentSlide?.advancesOnClick ?? true }
+    /// Whether a tap on the slide moves the show on: as the slide says, but
+    /// always while animations wait for one.
+    var advancesOnTap: Bool { hasStepsLeft || (currentSlide?.advancesOnClick ?? true) }
 
-    /// Waits out the current slide's time, if it has one, then moves on.
+    /// Whether the current slide has animations still to play.
+    var hasStepsLeft: Bool { builds < (currentSlide?.animationTimeline.steps.count ?? 0) }
+
+    /// Waits out the current slide's time, if it has one, after its running
+    /// animations settle, then moves on.
     private func scheduleAdvance() {
-        let now = (position: position, blanked: isBlanked, presenting: isPresenting)
+        let now = (position: position, builds: builds, blanked: isBlanked, presenting: isPresenting)
         if let advanceFor, advanceFor == now { return }
         advanceFor = now
         advanceTask?.cancel()
         advanceTask = nil
         guard isPresenting, !isBlanked, let seconds = currentSlide?.autoAdvanceAfter else { return }
-        let shown = position
+        let shown = (position, builds)
+        let wait = max(seconds, 0.1) + animationTimeLeft
         advanceTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(max(seconds, 0.1)))
-            guard !Task.isCancelled, let self, self.isPresenting, self.position == shown, !self.isBlanked else { return }
+            try? await Task.sleep(for: .seconds(wait))
+            guard !Task.isCancelled, let self, self.isPresenting, self.position == shown.0, self.builds == shown.1,
+                  !self.isBlanked else { return }
             self.advanceFor = nil
             self.next()
         }
     }
 
+    /// Takes back the last animation step, or with none played, goes back a slide.
     func previous() {
-        guard isPresenting, position > 0 else { return }
+        guard isPresenting else { return }
+        if builds > (currentSlide?.animationTimeline.initiallyBegun ?? 0) {
+            // Back to how the slide looked before the step, without playing it backwards.
+            builds -= 1
+            buildStartedAt = .distantPast
+            isBlanked = false
+            trackAnimation()
+            return publish()
+        }
+        guard position > 0 else { return }
         isBlanked = false
         position -= 1
+        // Going back finds a slide as it was left: every animation played.
+        beginSlide(fullyBuilt: true)
         publish()
     }
 
@@ -125,7 +164,61 @@ final class PresentationSession {
         guard isPresenting, order.indices.contains(index) else { return }
         position = index
         isBlanked = false
+        beginSlide()
         publish()
+    }
+
+    // MARK: - Animations
+
+    /// The look of the current slide's animated shapes at `date`.
+    func animationFrame(at date: Date) -> AnimationFrame? {
+        guard let presentation, let slide = currentSlide, !slide.animations.isEmpty else { return nil }
+        return slide.animationTimeline.frame(
+            begun: builds, elapsed: date.timeIntervalSince(buildStartedAt), shapes: slide.shapes,
+            slideSize: presentation.slideSize.points
+        )
+    }
+
+    /// Starts the slide now showing: the animations that run as it appears
+    /// begin, the rest wait for taps.
+    private func beginSlide(fullyBuilt: Bool = false) {
+        let timeline = currentSlide?.animationTimeline
+        if fullyBuilt {
+            builds = timeline?.steps.count ?? 0
+            buildStartedAt = .distantPast
+        } else {
+            builds = timeline?.initiallyBegun ?? 0
+            buildStartedAt = Date()
+        }
+        trackAnimation()
+    }
+
+    /// Seconds until the step playing now settles.
+    private var animationTimeLeft: Double {
+        guard builds > 0, let timeline = currentSlide?.animationTimeline else { return 0 }
+        return max(timeline.duration(ofStep: builds - 1) - Date().timeIntervalSince(buildStartedAt), 0)
+    }
+
+    private func trackAnimation() {
+        animatingTask?.cancel()
+        let remaining = animationTimeLeft
+        isAnimating = remaining > 0
+        guard isAnimating else { return }
+        animatingTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(remaining))
+            guard !Task.isCancelled else { return }
+            self?.isAnimating = false
+        }
+    }
+
+    /// Starts the videos and sounds a step plays, as PowerPoint does on the click that reaches them.
+    private func playMedia(inStep index: Int) {
+        guard let slide = currentSlide else { return }
+        let steps = slide.animationTimeline.steps
+        guard steps.indices.contains(index) else { return }
+        for entry in steps[index] where entry.animation.playsMedia {
+            if let shape = slide.shapes.first(where: { $0.shapeID == entry.animation.shapeID }) { media.play(shape.id) }
+        }
     }
 
     // MARK: - Media

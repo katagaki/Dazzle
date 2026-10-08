@@ -200,7 +200,7 @@ struct PresenterView: View {
     @ViewBuilder
     private var currentSlide: some View {
         if let presentation = session.presentation, let slide = session.currentSlide {
-            SlideView(presentation: presentation, slide: slide)
+            ShowingSlideView(session: session, presentation: presentation, slide: slide)
                 .aspectRatio(presentation.slideSize.aspectRatio, contentMode: .fit)
                 // The presenter can follow the slide's links from here.
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { currentSize = $0 }
@@ -294,6 +294,25 @@ struct PresenterView: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+/// The slide a slideshow is on, its animations playing as it is tapped through.
+struct ShowingSlideView: View {
+    var session: PresentationSession
+    var presentation: Presentation
+    var slide: Slide
+
+    var body: some View {
+        TimelineView(.animation(paused: !session.isAnimating)) { timeline in
+            SlideView(presentation: presentation, slide: slide, options: options(at: timeline.date))
+        }
+    }
+
+    private func options(at date: Date) -> SlideRenderer.Options {
+        var options = SlideRenderer.Options.presentation
+        options.animation = session.animationFrame(at: date)
+        return options
     }
 }
 

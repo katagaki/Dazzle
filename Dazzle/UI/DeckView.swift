@@ -207,7 +207,7 @@ struct DeckView: View {
 
     // MARK: - Toolbars
 
-    /// Clipboard, history, Play, then Share and "…", each its own group.
+    /// Clipboard, history, Play, Find, then Share and "…", each its own group.
     /// An iPhone's bar holds three buttons, so there only history, Share and
     /// "…" are shown.
     @ToolbarContentBuilder
@@ -274,8 +274,15 @@ struct DeckView: View {
 
     @ToolbarContentBuilder
     private var presentationToolbar: some ToolbarContent {
+        // An iPhone's bar has no room for it; there it stays in "…".
+        if horizontalSizeClass != .compact {
+            ToolbarItem(placement: .primaryAction) {
+                findButton
+            }
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        }
         ToolbarItemGroup(placement: .primaryAction) {
-            // An iPhone's bar has no room for it, so there it moves to the "…" menu.
+            // An iPhone's bar has no room for it either, so there it moves to the "…" menu.
             if !document.presentation.unsupportedFeatures.isEmpty, horizontalSizeClass != .compact {
                 Button {
                     state.isShowingUnsupportedFeatureNotice = true
@@ -350,8 +357,8 @@ struct DeckView: View {
                     }
                     .accessibilityIdentifier("unsupportedFeatures")
                 }
+                findButton
             }
-            findButton
             Button("Toolbar.HeaderFooter", systemImage: "rectangle.bottomthird.inset.filled") {
                 state.endEditingText()
                 state.presentedPanel = .headerFooter

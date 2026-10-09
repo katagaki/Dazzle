@@ -207,11 +207,15 @@ struct DeckView: View {
 
     // MARK: - Toolbars
 
-    /// History, Play, then Share and "…", each its own group.
+    /// Clipboard, history, Play, then Share and "…", each its own group.
     /// An iPhone's bar holds three buttons, so there only history, Share and
     /// "…" are shown.
     @ToolbarContentBuilder
     private var editorToolbar: some ToolbarContent {
+        if horizontalSizeClass != .compact {
+            clipboardToolbar
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        }
         undoToolbar
         // On iPhone the bar has no room for it; it leads the slide strip instead.
         if horizontalSizeClass != .compact {
@@ -225,6 +229,27 @@ struct DeckView: View {
         }
         ToolbarSpacer(.fixed, placement: .primaryAction)
         presentationToolbar
+    }
+
+    /// Cut, copy and paste: the selected shapes, or with none, the slide.
+    @ToolbarContentBuilder
+    private var clipboardToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            let hasSelection = !state.selectedShapeIDs.isEmpty
+            Button(hasSelection ? "Edit.Cut" : "Edit.CutSlide", systemImage: "scissors") {
+                state.cutSelection(in: &document.presentation)
+            }
+            .disabled(!hasSelection && document.presentation.slides.count < 2)
+            .accessibilityIdentifier("cut")
+            Button(hasSelection ? "Edit.Copy" : "Edit.CopySlide", systemImage: "doc.on.doc") {
+                state.copySelection(in: document.presentation)
+            }
+            .accessibilityIdentifier("copy")
+            Button("Edit.Paste", systemImage: "doc.on.clipboard") {
+                state.paste(in: &document.presentation)
+            }
+            .accessibilityIdentifier("paste")
+        }
     }
 
     @ToolbarContentBuilder

@@ -65,9 +65,7 @@ struct DeckView: View {
         .focusable(state.presentedPanel == nil && !state.isDrawing && state.editingTextShapeID == nil)
         .focusEffectDisabled()
         .onKeyPress(action: handleKeyPress)
-        .toolbar { undoToolbar }
-        .toolbar { moreToolbar }
-        .toolbar { presentationToolbar }
+        .toolbar { editorToolbar }
         .sheet(item: $state.presentedPanel) { panel in
             NavigationStack {
                 panelContent(panel)
@@ -209,6 +207,26 @@ struct DeckView: View {
 
     // MARK: - Toolbars
 
+    /// History, Play, then Share and "…", each its own group.
+    /// An iPhone's bar holds three buttons, so there only history, Share and
+    /// "…" are shown.
+    @ToolbarContentBuilder
+    private var editorToolbar: some ToolbarContent {
+        undoToolbar
+        // On iPhone the bar has no room for it; it leads the slide strip instead.
+        if horizontalSizeClass != .compact {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) {
+                PlayMenu(play: play, current: { state.selectedIndex(in: document.presentation) }) {
+                    Label("Toolbar.Play", systemImage: "play.fill")
+                }
+                .buttonStyle(.glassProminent)
+            }
+        }
+        ToolbarSpacer(.fixed, placement: .primaryAction)
+        presentationToolbar
+    }
+
     @ToolbarContentBuilder
     private var undoToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
@@ -231,10 +249,9 @@ struct DeckView: View {
 
     @ToolbarContentBuilder
     private var presentationToolbar: some ToolbarContent {
-        // Declared before the share button so it sits beside it on the inside.
-        // An iPhone's bar holds three buttons, so there it moves to the "…" menu.
-        if !document.presentation.unsupportedFeatures.isEmpty, horizontalSizeClass != .compact {
-            ToolbarItem(placement: .primaryAction) {
+        ToolbarItemGroup(placement: .primaryAction) {
+            // An iPhone's bar has no room for it, so there it moves to the "…" menu.
+            if !document.presentation.unsupportedFeatures.isEmpty, horizontalSizeClass != .compact {
                 Button {
                     state.isShowingUnsupportedFeatureNotice = true
                 } label: {
@@ -246,60 +263,60 @@ struct DeckView: View {
                     UnsupportedFeatureNotice(report: document.presentation.unsupportedFeatures)
                 }
             }
-        }
-        ToolbarItem(placement: .primaryAction) {
-            Menu {
-                ShareLink(
-                    item: PresentationShare(presentation: document.presentation, name: name),
-                    preview: SharePreview(name, image: Image(systemName: "play.rectangle"))
-                ) {
-                    Label("Share.Presentation", systemImage: "doc")
-                }
-                Button("Share.PDF", systemImage: "doc.richtext") {
-                    state.exportFormat = .pdf
-                    state.presentedPanel = .export
-                }
-                .accessibilityIdentifier("exportPDF")
-                Button("Share.Images", systemImage: "photo.on.rectangle") {
-                    state.exportFormat = .images
-                    state.presentedPanel = .export
-                }
-                .accessibilityIdentifier("exportImages")
-                Button("Share.Video", systemImage: "film") {
-                    state.exportFormat = .video
-                    state.presentedPanel = .export
-                }
-                .accessibilityIdentifier("exportVideo")
-                Button("Share.Print", systemImage: "printer") {
-                    state.exportFormat = .pdf
-                    state.presentedPanel = .export
-                }
-                .keyboardShortcut("p", modifiers: .command)
-                .accessibilityIdentifier("exportPrint")
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-            }
-            .accessibilityIdentifier("share")
-            .accessibilityLabel("Toolbar.Share")
-        }
-        // On iPhone the bar has no room for it; it leads the slide strip instead.
-        if horizontalSizeClass != .compact {
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-            ToolbarItem(placement: .primaryAction) {
-                PlayMenu(play: play, current: { state.selectedIndex(in: document.presentation) }) {
-                    Label("Toolbar.Play", systemImage: "play.fill")
-                }
-                .buttonStyle(.glassProminent)
-            }
+            shareMenu
+            moreMenu
         }
     }
 
-    /// Secondary actions are gathered into the navigation bar's "…" menu.
-    @ToolbarContentBuilder
-    private var moreToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .secondaryAction) {
-            // A narrow bar has no room for Redo and would push it into this
-            // menu itself, below everything here. Placing it keeps Source Code last.
+    private var findButton: some View {
+        Button("Toolbar.Find", systemImage: "magnifyingglass") {
+            state.endEditingText()
+            state.presentedPanel = .find
+        }
+        .keyboardShortcut("f", modifiers: .command)
+        .accessibilityIdentifier("find")
+    }
+
+    private var shareMenu: some View {
+        Menu {
+            ShareLink(
+                item: PresentationShare(presentation: document.presentation, name: name),
+                preview: SharePreview(name, image: Image(systemName: "play.rectangle"))
+            ) {
+                Label("Share.Presentation", systemImage: "doc")
+            }
+            Button("Share.PDF", systemImage: "doc.richtext") {
+                state.exportFormat = .pdf
+                state.presentedPanel = .export
+            }
+            .accessibilityIdentifier("exportPDF")
+            Button("Share.Images", systemImage: "photo.on.rectangle") {
+                state.exportFormat = .images
+                state.presentedPanel = .export
+            }
+            .accessibilityIdentifier("exportImages")
+            Button("Share.Video", systemImage: "film") {
+                state.exportFormat = .video
+                state.presentedPanel = .export
+            }
+            .accessibilityIdentifier("exportVideo")
+            Button("Share.Print", systemImage: "printer") {
+                state.exportFormat = .pdf
+                state.presentedPanel = .export
+            }
+            .keyboardShortcut("p", modifiers: .command)
+            .accessibilityIdentifier("exportPrint")
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+        }
+        .accessibilityIdentifier("share")
+        .accessibilityLabel("Toolbar.Share")
+    }
+
+    /// The "…" menu. A menu of its own rather than `.secondaryAction`, which
+    /// an iPad's document bar lays out inline instead of collapsing.
+    private var moreMenu: some View {
+        Menu {
             if horizontalSizeClass == .compact {
                 redoButton
                 if !document.presentation.unsupportedFeatures.isEmpty {
@@ -309,12 +326,7 @@ struct DeckView: View {
                     .accessibilityIdentifier("unsupportedFeatures")
                 }
             }
-            Button("Toolbar.Find", systemImage: "magnifyingglass") {
-                state.endEditingText()
-                state.presentedPanel = .find
-            }
-            .keyboardShortcut("f", modifiers: .command)
-            .accessibilityIdentifier("find")
+            findButton
             Button("Toolbar.HeaderFooter", systemImage: "rectangle.bottomthird.inset.filled") {
                 state.endEditingText()
                 state.presentedPanel = .headerFooter
@@ -325,7 +337,11 @@ struct DeckView: View {
                     Label("Toolbar.SourceCode", systemImage: "chevron.left.forwardslash.chevron.right")
                 }
             }
+        } label: {
+            Image(systemName: "ellipsis")
         }
+        .accessibilityIdentifier("more")
+        .accessibilityLabel("Toolbar.More")
     }
 
     // MARK: - Keyboard

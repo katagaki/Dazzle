@@ -49,6 +49,17 @@
                ReferencedContainer = "container:Dazzle.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "DA0000000000000000000033"
+               BuildableName = "DazzleUITests.xctest"
+               BlueprintName = "DazzleUITests"
+               ReferencedContainer = "container:Dazzle.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

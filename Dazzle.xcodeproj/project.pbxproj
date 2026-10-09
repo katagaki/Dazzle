@@ -25,6 +25,13 @@
 			remoteGlobalIDString = DA0000000000000000000030;
 			remoteInfo = Dazzle;
 		};
+		DA0000000000000000000062 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DA0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DA0000000000000000000030;
+			remoteInfo = Dazzle;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -45,6 +52,7 @@
 		DA0000000000000000000020 /* Dazzle.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dazzle.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA0000000000000000000021 /* Dazzle Mini.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dazzle Mini.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA0000000000000000000022 /* DazzleTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DazzleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DA0000000000000000000023 /* DazzleUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DazzleUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -81,6 +89,11 @@
 			path = DazzleTests;
 			sourceTree = "<group>";
 		};
+		DA0000000000000000000015 /* DazzleUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DazzleUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXGroup section */
@@ -91,6 +104,7 @@
 				DA0000000000000000000011 /* DazzleWatch */,
 				DA0000000000000000000012 /* Shared */,
 				DA0000000000000000000013 /* DazzleTests */,
+				DA0000000000000000000015 /* DazzleUITests */,
 				DA0000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -101,6 +115,7 @@
 				DA0000000000000000000020 /* Dazzle.app */,
 				DA0000000000000000000021 /* Dazzle Mini.app */,
 				DA0000000000000000000022 /* DazzleTests.xctest */,
+				DA0000000000000000000023 /* DazzleUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -175,6 +190,27 @@
 			productReference = DA0000000000000000000022 /* DazzleTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		DA0000000000000000000033 /* DazzleUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DA0000000000000000000084 /* Build configuration list for PBXNativeTarget "DazzleUITests" */;
+			buildPhases = (
+				DA0000000000000000000046 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DA0000000000000000000072 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				DA0000000000000000000015 /* DazzleUITests */,
+			);
+			name = DazzleUITests;
+			packageProductDependencies = (
+			);
+			productName = DazzleUITests;
+			productReference = DA0000000000000000000023 /* DazzleUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -192,6 +228,10 @@
 						CreatedOnToolsVersion = 27.0;
 					};
 					DA0000000000000000000032 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = DA0000000000000000000030;
+					};
+					DA0000000000000000000033 = {
 						CreatedOnToolsVersion = 27.0;
 						TestTargetID = DA0000000000000000000030;
 					};
@@ -218,6 +258,7 @@
 				DA0000000000000000000030 /* Dazzle */,
 				DA0000000000000000000031 /* Dazzle Mini */,
 				DA0000000000000000000032 /* DazzleTests */,
+				DA0000000000000000000033 /* DazzleUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -261,6 +302,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DA0000000000000000000046 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -273,6 +321,11 @@
 			isa = PBXTargetDependency;
 			target = DA0000000000000000000030 /* Dazzle */;
 			targetProxy = DA0000000000000000000061 /* PBXContainerItemProxy */;
+		};
+		DA0000000000000000000072 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DA0000000000000000000030 /* Dazzle */;
+			targetProxy = DA0000000000000000000062 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -541,6 +594,34 @@
 			};
 			name = Release;
 		};
+		DA0000000000000000000098 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tsubuzaki.Dazzle.uitests;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Dazzle;
+			};
+			name = Debug;
+		};
+		DA0000000000000000000099 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tsubuzaki.Dazzle.uitests;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Dazzle;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -576,6 +657,15 @@
 			buildConfigurations = (
 				DA0000000000000000000096 /* Debug */,
 				DA0000000000000000000097 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DA0000000000000000000084 /* Build configuration list for PBXNativeTarget "DazzleUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DA0000000000000000000098 /* Debug */,
+				DA0000000000000000000099 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

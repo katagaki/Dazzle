@@ -1,7 +1,8 @@
 import Foundation
 
-/// The package a new presentation starts as: a 16:9 deck with the Office
-/// theme, five common layouts and one title slide.
+/// The package a new presentation starts as: a 16:9 deck with a theme of
+/// HIG system colours set in Arial and Meiryo UI, five common layouts and
+/// one title slide.
 ///
 /// Built here rather than shipped as a file so every part is readable in
 /// review, and read back through `PPTXReader` like any other file.
@@ -120,19 +121,20 @@ enum PresentationTemplate {
     // MARK: - Theme
 
     private static let theme = """
-        <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme">\
-        <a:themeElements><a:clrScheme name="Office">\
+        <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Dazzle">\
+        <a:themeElements><a:clrScheme name="Dazzle">\
         <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>\
         <a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>\
-        <a:dk2><a:srgbClr val="0E2841"/></a:dk2><a:lt2><a:srgbClr val="E8E8E8"/></a:lt2>\
-        <a:accent1><a:srgbClr val="156082"/></a:accent1><a:accent2><a:srgbClr val="E97132"/></a:accent2>\
-        <a:accent3><a:srgbClr val="196B24"/></a:accent3><a:accent4><a:srgbClr val="0F9ED5"/></a:accent4>\
-        <a:accent5><a:srgbClr val="A02B93"/></a:accent5><a:accent6><a:srgbClr val="4EA72E"/></a:accent6>\
-        <a:hlink><a:srgbClr val="467886"/></a:hlink><a:folHlink><a:srgbClr val="96607D"/></a:folHlink>\
+        <a:dk2><a:srgbClr val="1C1C1E"/></a:dk2><a:lt2><a:srgbClr val="F2F2F7"/></a:lt2>\
+        <a:accent1><a:srgbClr val="007AFF"/></a:accent1><a:accent2><a:srgbClr val="FF9500"/></a:accent2>\
+        <a:accent3><a:srgbClr val="34C759"/></a:accent3><a:accent4><a:srgbClr val="FF3B30"/></a:accent4>\
+        <a:accent5><a:srgbClr val="AF52DE"/></a:accent5><a:accent6><a:srgbClr val="30B0C7"/></a:accent6>\
+        <a:hlink><a:srgbClr val="007AFF"/></a:hlink><a:folHlink><a:srgbClr val="AF52DE"/></a:folHlink>\
         </a:clrScheme>\
-        <a:fontScheme name="Office"><a:majorFont><a:latin typeface="Aptos Display"/><a:ea typeface=""/>\
-        <a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/><a:ea typeface=""/>\
-        <a:cs typeface=""/></a:minorFont></a:fontScheme>\
+        <a:fontScheme name="Dazzle"><a:majorFont><a:latin typeface="Arial"/><a:ea typeface="Meiryo UI"/>\
+        <a:cs typeface=""/><a:font script="Jpan" typeface="Meiryo UI"/></a:majorFont>\
+        <a:minorFont><a:latin typeface="Arial"/><a:ea typeface="Meiryo UI"/>\
+        <a:cs typeface=""/><a:font script="Jpan" typeface="Meiryo UI"/></a:minorFont></a:fontScheme>\
         <a:fmtScheme name="Office"><a:fillStyleLst>\
         <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>\
         <a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:lumMod val="110000"/>\

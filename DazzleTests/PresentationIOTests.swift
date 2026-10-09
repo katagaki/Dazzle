@@ -71,7 +71,7 @@ struct TemplateTests {
         let style = SlideStyleContext(presentation: presentation, slide: presentation.slides[0])
         #expect(style.color(.scheme("tx1")).hexValue == 0x000000)
         #expect(style.color(.scheme("bg1")).hexValue == 0xFFFFFF)
-        #expect(style.color(.scheme("accent1")).hexValue == 0x156082)
+        #expect(style.color(.scheme("accent1")).hexValue == 0x007AFF)
     }
 
     @Test("Title text inherits the master's title size")

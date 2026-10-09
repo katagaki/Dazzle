@@ -14,6 +14,15 @@ final class RemoteConnection: NSObject {
     private(set) var deliveryFailed = false
 
     func activate() {
+        #if DEBUG
+        // The App Store screenshots stage a slideshow without an iPhone; see capture.sh.
+        if let path = ProcessInfo.processInfo.environment["DAZZLE_REMOTE_STATE"],
+           let data = FileManager.default.contents(atPath: path),
+           let context = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+            update(state: RemoteState(context: context), isReachable: true)
+            return
+        }
+        #endif
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()

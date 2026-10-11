@@ -106,16 +106,9 @@ enum PresetGeometry {
             path.addCurve(to: point(w / 2, h / 4), control1: point(-w * 0.25, h / 2), control2: point(-w * 0.1, -h / 3))
             path.closeSubpath()
         case "wedgeRectCallout", "wedgeRoundRectCallout", "wedgeEllipseCallout":
-            let tipX = w / 2 + w * adjust("adj1", -20_833)
-            let tipY = h / 2 + h * adjust("adj2", 62_500)
-            if name == "wedgeEllipseCallout" {
-                path.addEllipse(in: rect)
-            } else if name == "wedgeRoundRectCallout" {
-                path.addRoundedRect(in: rect, cornerWidth: shortSide / 6, cornerHeight: shortSide / 6)
-            } else {
-                path.addRect(rect)
-            }
-            polygon([point(w * 0.42, h / 2), point(tipX, tipY), point(w * 0.58, h / 2)])
+            callout(name, path: path, rect: rect,
+                    offset: CGPoint(x: adjust("adj1", -20_833), y: adjust("adj2", 62_500)),
+                    corner: adjust("adj3", 16_667))
         case "can", "flowChartMagneticDisk":
             let lid = h * adjust("adj", 25_000) / 2
             path.move(to: point(0, lid / 2))
@@ -174,6 +167,9 @@ enum PresetGeometry {
         case "roundRect", "flowChartAlternateProcess":
             let corner = min(shortSide * adjust("adj", 16_667), shortSide / 2) * 0.292_9
             return inset(left: corner, top: corner, right: corner, bottom: corner)
+        case "wedgeRoundRectCallout":
+            let corner = min(max(shortSide * adjust("adj3", 16_667), 0), shortSide / 2) * 0.292_9
+            return inset(left: corner, top: corner, right: corner, bottom: corner)
         case "diamond", "flowChartDecision":
             return inset(left: w / 4, top: h / 4, right: w / 4, bottom: h / 4)
         case "triangle", "flowChartExtract":
@@ -202,6 +198,72 @@ enum PresetGeometry {
         default:
             return rect
         }
+    }
+
+    /// The tail replaces part of the body's perimeter. Separate overlapping
+    /// subpaths would cut a hole with even-odd filling and stroke across the text.
+    private static func callout(_ name: String, path: CGMutablePath, rect: CGRect, offset: CGPoint, corner: CGFloat) {
+        let w = rect.width
+        let h = rect.height
+        guard w > 0, h > 0 else { return }
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: rect.minX + x, y: rect.minY + y)
+        }
+        let tip = point(w * (0.5 + offset.x), h * (0.5 + offset.y))
+        if name == "wedgeEllipseCallout" {
+            guard hypot(offset.x * 2, offset.y * 2) > 1 else {
+                path.addEllipse(in: rect)
+                return
+            }
+            let angle = atan2(offset.y, offset.x)
+            let gap = CGFloat.pi * 11 / 180
+            let start = angle + gap
+            let transform = CGAffineTransform(translationX: rect.midX, y: rect.midY)
+                .scaledBy(x: w / 2, y: h / 2)
+            path.move(to: tip)
+            path.addLine(to: point(w / 2 * (1 + cos(start)), h / 2 * (1 + sin(start))))
+            path.addArc(center: .zero, radius: 1, startAngle: start,
+                        endAngle: angle - gap + 2 * .pi, clockwise: false, transform: transform)
+            path.closeSubpath()
+            return
+        }
+
+        let radius = name == "wedgeRoundRectCallout" ? min(max(min(w, h) * corner, 0), min(w, h) / 2) : 0
+        // DrawingML attaches to the dominant axis in normalized shape space.
+        let vertical = abs(offset.y) > abs(offset.x)
+        let side = vertical ? (offset.y > 0 ? 2 : 0) : (offset.x > 0 ? 1 : 3)
+        let hasTail = max(abs(offset.x), abs(offset.y)) > 0.5
+        let x1 = min(w - radius, max(radius, w * (offset.x > 0 ? 7 : 2) / 12))
+        let x2 = min(w - radius, max(radius, w * (offset.x > 0 ? 10 : 5) / 12))
+        let y1 = min(h - radius, max(radius, h * (offset.y > 0 ? 7 : 2) / 12))
+        let y2 = min(h - radius, max(radius, h * (offset.y > 0 ? 10 : 5) / 12))
+        func tail(_ edge: Int, from: CGPoint, to: CGPoint) {
+            guard hasTail, side == edge else { return }
+            path.addLine(to: from)
+            path.addLine(to: tip)
+            path.addLine(to: to)
+        }
+        func turn(_ x: CGFloat, _ y: CGFloat, _ endX: CGFloat, _ endY: CGFloat) {
+            if radius > 0 {
+                path.addArc(tangent1End: point(x, y), tangent2End: point(endX, endY), radius: radius)
+            } else {
+                path.addLine(to: point(x, y))
+            }
+        }
+        path.move(to: point(radius, 0))
+        tail(0, from: point(x1, 0), to: point(x2, 0))
+        path.addLine(to: point(w - radius, 0))
+        turn(w, 0, w, radius)
+        tail(1, from: point(w, y1), to: point(w, y2))
+        path.addLine(to: point(w, h - radius))
+        turn(w, h, w - radius, h)
+        tail(2, from: point(x2, h), to: point(x1, h))
+        path.addLine(to: point(radius, h))
+        turn(0, h, 0, h - radius)
+        tail(3, from: point(0, y2), to: point(0, y1))
+        path.addLine(to: point(0, radius))
+        turn(0, 0, radius, 0)
+        path.closeSubpath()
     }
 
     private static func regularPolygon(sides: Int, in rect: CGRect) -> [CGPoint] {
